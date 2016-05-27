@@ -1,0 +1,60 @@
+#! /usr/bin/env perl
+
+use strict;
+
+my $in = shift(@ARGV);
+my $out = shift(@ARGV);
+my $add = shift(@ARGV);
+if($add =~ /^$/){
+	$add = 0;
+}
+
+open(IN, $in);
+open(OUT, "> $out");
+while(<IN>){
+	s/\n//;
+	my $line = $_;
+	if(/^([\s\t]*-?\d+[\s\t]*\|){3}([\s\t]+\d+)+/){
+		my $pos = length($_);
+		my $title = substr($_, 0, 26);
+		$pos -= 26;
+		my $data = substr($_, 26, $pos);
+		$data =~ s/^[\t\s]+//;
+		$data =~ s/[\t\s]$//;
+		my @datas = split(/[\s\t]+/, $data);
+		print OUT $title;
+		foreach(@datas){
+			$_ += $add;
+			print OUT &adjust(6, $_);
+		}
+		print OUT "\n";
+	}
+	elsif(/^[\s\t]*\d+\s-[\s\t]*\d+/){
+		s/^[\s\t]*//;
+		s/[\s\t]*$//;
+		my @datas = split(/\s-[\s\t]*/, $_);
+		foreach(@datas){
+			$_ += $add;
+			$_ = &adjust(6, $_);
+		}
+		my $data = join(" - ", @datas);
+		print OUT $data, "\n";
+	}
+	else{
+		print OUT $_, "\n";
+	}
+}
+close(IN);
+close(OUT);
+
+# =============== adjust =============== #
+sub adjust{
+my $max = shift(@_);	# 調整後文字数
+my $line = shift(@_);	# 文字列
+
+my $space = length($line);	# 文字列の長さ
+$space = $max - $space;		# 追加するスペース数
+$space = " " x $space;			# スペース
+$line = $space . $line;		# スペース追加
+return($line);
+}

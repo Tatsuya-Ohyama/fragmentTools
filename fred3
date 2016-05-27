@@ -1,0 +1,562 @@
+#!/usr/bin/env perl
+
+#
+#	fred3 - fragment editor for mizuho ABINIT-MP	Last update 20160106
+#
+
+use strict;
+
+# コマンドライン引数処理
+my $in = "";
+my $operation = 0;
+my $flag_arg = 0;
+my $reference_pdb = "";
+foreach my $arg (@ARGV){
+	if(($arg =~ /^--help$/i) || ($arg =~ /^-H$/i)){
+		&help();
+		exit;
+	}
+	elsif(($arg =~ /^--edit$/i) || ($arg =~ /^-E$/i)){
+		$operation = 1;
+	}
+	elsif(($arg =~ /^--reload$/i) || ($arg =~ /^-R$/i)){
+		$operation = 2;
+	}
+	elsif(($arg =~ /^--output$/i) || ($arg =~ /^-O$/i)){
+		$operation = 3;
+	}
+	elsif(($arg =~ /^--pdb$/i) || ($arg =~ /^-P$/i)){
+		$flag_arg = 1;
+	}
+	elsif($flag_arg == 1){
+		$reference_pdb = $arg;
+		if(! -f $reference_pdb){
+			print STDERR "WARNING: No such reference PDB ($reference_pdb)\n";
+			print STDERR "         ReadGeom file will be used as Reference PDB\n";
+			$reference_pdb = "";
+		}
+		$flag_arg = 0;
+	}
+	else{
+		if(-f $arg){
+			$in = $arg;
+		}
+		else{
+			print STDERR "ERROR: No such file $arg\n";
+			exit;
+		}
+	}
+}
+
+if($operation == 1){
+	&edit($in);
+}
+elsif($operation == 2){
+	&reload($in);
+}
+elsif($operation == 3){
+	&output($in);
+}
+
+
+# ***** edit ***** #
+# 編集ファイルに変換
+sub edit(){
+	my $in = shift(@_);
+
+	my $flag_read = 0;
+	my @lines = ();
+	my @fragment_atom = ();
+	my $all_atom = 0;
+	my $now_atom = 0;
+	my $fragment = 0;
+	my $now_fragment = 0;
+
+	my @fragment_atom_numbers = ();
+	my @charges = ();
+	my @BDAs = ();
+	my @fragment_atoms = ();
+	my @now_fragment_atoms = ();
+	my @connections = ();
+
+	open(IN, $in);
+	while(my $line = <IN>){
+		if($line =~ /^[\s\t]*\&FRAGMENT/){	# FRAGMENT ネームリストの始端
+			$flag_read = 1;
+			push(@lines, $line);
+			next;
+		}
+		elsif(0 < $flag_read){
+			if($line =~ /^[\s\t]*\//){	# FRAGMENT ネームリストの終端
+				$flag_read = 0;
+				push(@lines, "{...}\n");
+				push(@lines, $line);
+				next;
+			}
+
+			my @datas = &get_data($line);
+
+			if($flag_read == 1){	# フラグメント構成原子
+				$fragment += scalar(@datas);
+				push(@fragment_atom_numbers, @datas);
+
+				my $tmp = &sum(@datas);
+				$now_atom += $tmp;
+				if($all_atom == $now_atom){	# PDBの総原子数に現在の原子数が一致したらフラグ切り替え
+					$flag_read = 2;
+				}
+				elsif($all_atom < $now_atom){	# PDBの総原子数以上の原子が検出
+					print STDERR "ERROR: The number of atoms in PDB file and ajf file mismatched\n";
+					print STDERR "       Maybe wrong PDB file was specified.\n";
+					print STDERR "       Please fix ReadGeom in ajf file, OR use -p option.\n";
+					exit;
+				}
+			}
+			elsif($flag_read == 2){	# 電荷情報
+				$now_fragment += scalar(@datas);
+				push(@charges, @datas);
+
+				if($fragment == $now_fragment){	# フラグメント数が総フラグメント数と一致したらフラグ切り替え
+					$flag_read = 3;
+					$now_fragment = 0;
+				}
+				elsif($fragment < $now_fragment){	# フラグメント数が総フラグメント数を超えた
+					print STDERR "ERROR: The number of fragments mismatched\n";
+					exit;
+				}
+			}
+			elsif($flag_read == 3){	# BDA
+				$now_fragment += scalar(@datas);
+				push(@BDAs, @datas);
+
+				if($fragment == $now_fragment){	# フラグメント数が総フラグメント数と一致したらフラグ切り替え
+					$flag_read = 4;
+					$now_fragment = 0;
+				}
+				elsif($fragment < $now_fragment){	# フラグメント数が総フラグメント数を超えた
+					print STDERR "ERROR: The number of fragments mismatched\n";
+					exit;
+				}
+			}
+			elsif($flag_read == 4){				# フラグメント構成原子の原子順序番号
+				push(@now_fragment_atoms, @datas);
+
+				if($fragment_atom_numbers[$now_fragment] <= scalar(@now_fragment_atoms)){
+					$now_fragment ++;
+					push(@fragment_atoms, join(",", @now_fragment_atoms));
+					@now_fragment_atoms = ();
+
+					if($fragment == $now_fragment){	# フラグメント数が総フラグメント数と一致したらフラグ切り替え
+						$flag_read = 5;
+						$now_fragment = 0;
+					}
+					elsif($fragment < $now_fragment){	# フラグメント数が総フラグメント数を超えた
+						print STDERR "ERROR: The number of fragments mismatched\n";
+						exit;
+					}
+				}
+			}
+			elsif($flag_read == 5){					# 接続情報
+				chomp($line);
+				push(@connections, $line);
+			}
+		}
+		else{
+			if($line =~ /ReadGeom/){	# 原子数を取得
+				my $pdb = $line;
+				if(length($reference_pdb) == 0){	# コマンドライン引数で PDB が指定されていない場合
+					$pdb = $line;
+					chomp($pdb);
+					$pdb =~ s/[\s\t]//g;
+					$pdb =~ s/ReadGeom=//;
+					$pdb =~ s/^['"]//;
+					$pdb =~ s/['"]$//;
+				}
+				else{								# コマンドライン引数で PDB が指定されている場合
+					$pdb = $reference_pdb;
+				}
+
+				if(-f $pdb){
+					open(PDB, $pdb);
+					while(my $tmp = <PDB>){
+						if($tmp =~ /^((HETATM)|(ATOM))/){
+							$all_atom ++;
+						}
+					}
+					close(PDB);
+				}
+				else{
+					print STDERR "ERROR: No such Geometry file $pdb\n";
+					exit;
+				}
+			}
+			push(@lines, $line);
+		}
+	}
+	close(IN);
+
+	# 出力
+	print "  FNo.  | charge | BDA | atoms of fragment\n";
+	$fragment = 0;
+	for($fragment = 0; $fragment < scalar(@fragment_atom_numbers); $fragment++) {
+		printf("%7s |%6s  |%3s  |", $fragment + 1, $charges[$fragment], $BDAs[$fragment]);
+		print &adjust_array($fragment_atoms[$fragment]), "\n";
+	}
+	print "\n << connections >>\n";
+	for($fragment = 0; $fragment < scalar(@connections); $fragment++) {
+		print $connections[$fragment], "\n";
+	}
+	print "\n\n";
+	print "===============< namelist >===============\n";
+	foreach(@lines){
+		print $_;
+	}
+}
+
+
+# ***** reload ***** #
+# ajf ファイルの内容をリロード
+sub reload(){
+	my $in = shift(@_);
+
+	my $flag_read = 0;
+	my $flag_namelist = 0;
+	my $fragment = 0;
+	my $charge = 0;
+	my $atom = 0;
+
+	open(IN, $in);
+	while(my $line = <IN>){
+		if($line =~ /<<\sconnections\s>>/){
+			$flag_read = 1;
+		}
+		elsif($line =~ /=+<\snamelist\s>=+/){
+			$flag_read = 2;
+		}
+
+		if($flag_read == 0){
+			if($line =~ /^[\s\t]*\d+[\s\t]*\|[\s\t]*-?\d+[\s\t]*\|[\s\t]*\d+[\s\t]*\|/){
+				chomp($line);
+
+				$fragment ++;
+				my @datas = split(/\|/, $line);
+				$datas[0] = sprintf("%7s", $fragment);	# フラグメント番号
+
+				$datas[1] =~ s/[\s\t]//g;			# 電荷
+				$datas[1] = sprintf("%6s", $datas[1]);
+				$charge += $datas[1];
+
+				$datas[2] =~ s/[\s\t]//g;			# BDA
+				$datas[2] = sprintf("%3s", $datas[2]);
+
+				$datas[3] =~ s/^[\s\t]+//;			# フラグメント構成原子
+				$datas[3] =~ s/[\s\t]+$//;
+				my @atoms = split(/[\s\t]+/, $datas[3]);
+				$atom += scalar(@atoms);
+				for (my $i = 0; $i < scalar(@atoms); $i++) {
+					$atoms[$i] =~ s/[\s\t]//g;
+					$atoms[$i] = sprintf("%8s", $atoms[$i]);
+				}
+				$datas[3] = join("", @atoms);
+
+				$line = $datas[0] . " |" . $datas[1] . "  |" . $datas[2] . "  |" . $datas[3] . "\n";
+			}
+		}
+		elsif($flag_read == 2){
+			if($line =~ /\&CNTRL/i){		# CNTRL ネームリスト
+				$flag_namelist = 1;
+			}
+			elsif($line =~ /\&FMOCNTRL/i){	# FMOCNTRL ネームリスト
+				$flag_namelist = 2;
+			}
+
+			if($flag_namelist == 1){	# Natom と charge の修正
+				if($line =~ /^[\s\t]*Natom/i){	# Natom
+					$line =~ s/\d+/$atom/;
+					print STDERR "Atom:     ", $atom, "\n";
+					$atom = "-";
+				}
+				elsif($line =~ /^[\s\t]*Charge/i){	# Charge
+					$line =~ s/-?\d+/$charge/;
+					print STDERR "Charge:   ", $charge, "\n";
+					$charge = "-";
+				}
+				elsif($line =~ /^[\s\t]*\/\n$/){	# 終端まで来て Natom と Charge がない場合
+					$line = "";
+					if($atom ne "-"){
+						$line .= "  Natom=$atom\n";
+						print STDERR "Atom:     ", $atom, "\n";
+					}
+					elsif($charge ne "-"){
+						$line .= "  Charge=$charge\n";
+						print STDERR "Charge:   ", $charge, "\n";
+					}
+					$line .= "/\n";
+					$flag_namelist = 0;
+				}
+			}
+			elsif($flag_namelist == 2){				# NF の修正
+				if($line =~ /^[\s\t]*NF/i){			# NF
+					$line =~ s/\d+/$fragment/;
+					print STDERR "Fragment: ", $fragment, "\n";
+					$fragment = "-";
+				}
+				elsif($line =~ /^[\s\t]*\/\n$/){	# 終端まで来て NF がない場合
+					$line = "";
+					if($fragment ne "-"){
+						$line .= "  NF=$fragment\n";
+						print STDERR "Fragment: ", $fragment, "\n";
+					}
+					$line .= "/\n";
+					$flag_namelist = 0;
+				}
+			}
+		}
+
+		print $line;
+	}
+	close(IN);
+
+}
+
+
+# ***** output ***** #
+# ajf ファイルに変換
+sub output(){
+	my $in = shift(@_);
+
+	my $flag_read = 0;
+	my @charges = ();
+	my @BDAs = ();
+	my @fragment_atoms = ();
+	my @connections = ();
+	my @namelists = ();
+	my $atom = 0;
+
+	open(IN, $in);
+	while(my $line = <IN>){
+		if($. == 1){
+			next;
+		}
+		elsif($line =~ /<<\sconnections\s>>/i){	# 接続情報
+			$flag_read = 1;
+			next;
+		}
+		elsif($line =~ /=+<\snamelist\s>=+/){	# このラベル以降はネームリスト
+			$flag_read = 2;
+			next;
+		}
+		elsif($line =~ /^[\s\t]*\n$/){	# 空行は無視
+			next;
+		}
+
+		if($flag_read == 0){	# フラグメント情報
+			chomp($line);
+			my @datas = split(/\|/, $line);
+			$datas[1] =~ s/[\s\t]+//g;
+			push(@charges, $datas[1]);
+			$datas[2] =~ s/[\s\t]+//g;
+			push(@BDAs, $datas[2]);
+			$datas[3] =~ s/^[\s\t]+//;
+			$datas[3] =~ s/[\s\t]+$//;
+			$datas[3] =~ s/[\s\t]+/,/g;
+			push(@fragment_atoms, $datas[3]);
+			my @tmps = split(/,/, $datas[3]);
+			$atom += scalar(@tmps);
+		}
+		elsif($flag_read == 1){	# 接続情報
+			push(@connections, $line);
+		}
+		elsif($flag_read == 2){	# ネームリスト
+			push(@namelists, $line);
+		}
+	}
+	close(IN);
+
+	my @fragment_atom_numbers = ();
+	for (my $i = 0; $i < scalar(@fragment_atoms); $i++) {	# フラグメントに含まれる原子数計算
+		my @tmps = split(/,/, $fragment_atoms[$i]);
+		push(@fragment_atom_numbers, scalar(@tmps));
+	}
+
+	# 出力
+	my $fragment = scalar(@fragment_atoms);
+	my $charge = 0;
+	for (my $i = 0; $i < scalar(@charges); $i++) {
+		$charge += $charges[$i];
+	}
+
+	my $saved = 0;
+	$flag_read = 0;
+	for (my $i = 0; $i < scalar(@namelists); $i++) {	# ネームリストを出力
+		if($namelists[$i] =~ /Natom/i){
+			$namelists[$i] =~ s/\d+/$atom/;
+		}
+		elsif($namelists[$i] =~ /NF/i){
+			$namelists[$i] =~ s/\d+/$fragment/;
+		}
+		elsif($namelists[$i] =~ /^[\s\t]*Charge/i){
+			$namelists[$i] =~ s/-?\d+/$charge/;
+		}
+		elsif($namelists[$i] =~ /AutoFrag/i){
+			$namelists[$i] =~ s/=.+$/='OFF'/;
+		}
+		elsif($namelists[$i] =~ /\&FRAGMENT/i){
+			$flag_read = 1;
+		}
+		elsif(($flag_read == 1) && ($namelists[$i] =~ /\{\.{3}\}/)){
+			&adjust_ajf(@fragment_atom_numbers);
+			&adjust_ajf(@charges);
+			&adjust_ajf(@BDAs);
+			#&adjust_ajf(@fragment_atoms);
+			foreach(@fragment_atoms){
+				my @tmps = split(/,/, $_);
+				my $j = 0;
+				my $str = "";
+				while(0 < scalar(@tmps)){
+					my $tmp = shift(@tmps);
+					$tmp = sprintf("%8s", $tmp);
+					$str .= $tmp;
+
+					$j ++;
+					if(10 <= $j){
+						print $str, "\n";
+						$str = "";
+						$j = 0;
+					}
+				}
+				if(length($str) != 0){
+					print $str, "\n";
+				}
+			}
+			foreach(@connections){
+				print $_;
+			}
+			next;
+		}
+		elsif($namelists[$i] =~ /^\//){
+			$saved = 1;
+		}
+		elsif($saved == 1){	# ネームリストの終端に改行を加える
+			if($namelists[$i] !~ /^[\s\t]*\n$/){
+				print "\n";
+			}
+			$saved = 0;
+		}
+		print $namelists[$i];
+	}
+}
+
+
+# ***** get_data ***** #
+# データを分割
+sub get_data(){
+	my $str = shift(@_);
+
+	chomp($str);
+
+	my @datas = ();
+	while(length($str) != 0){
+		my $data = substr($str, 0, 8);
+		$data =~ s/[\s\t]//g;
+		substr($str, 0, 8) = "";
+		push(@datas, $data);
+	}
+
+	return @datas;
+}
+
+# ***** sum ***** #
+# 合計を算出
+sub sum(){
+	my @datas = @_;
+
+	my $sum = 0;
+	foreach my $data(@datas){
+		$data =~ s/[\s\t]//g;
+		$sum += $data;
+	}
+
+	return $sum;
+}
+
+# ***** adjust ***** #
+# スペースで文字数を調整
+sub adjust(){
+	my $max_length = shift(@_);
+	my $str = shift(@_);
+
+	my $length = length($str);
+	$max_length -= $length;
+	my $space = " " x $max_length;
+	$str = $space . $str;
+
+	return $str;
+}
+
+# ***** adjust_array ***** #
+# コンマで区切られたデータを変換
+sub adjust_array(){
+	my $str = shift(@_);
+
+	my @datas = split(/,/, $str);
+	for (my $i = 0; $i < scalar(@datas); $i++) {
+		$datas[$i] = sprintf("%8s", $datas[$i]);
+	}
+
+	return join("", @datas);
+}
+
+# ***** adjust_ajf ***** #
+# ajf 形式のリストに変換
+sub adjust_ajf(){
+	my @lists = @_;
+
+	my @saved = ();
+	my @new_lists = ();
+	for (my $i = 0; $i < scalar(@lists); $i++) {
+		$lists[$i] =~ s/^[\s\t]+//;
+		$lists[$i] =~ s/[\s\t]+$//;
+		$lists[$i] =~ s/[\s\t]+/,/;
+		my @datas = split(/,/, $lists[$i]);
+		push(@saved, @datas);
+		if(10 <= scalar(@saved)){
+			my $data = "";
+			for (my $j = 0; $j < 10; $j++) {
+				my $tmp = sprintf("%8s", $saved[$j]);
+				$data .= $tmp;
+			}
+			print $data, "\n";
+			splice(@saved, 0, 10);
+		}
+	}
+	if(scalar(@saved) != 0){
+		my $data = "";
+		for (my $i = 0; $i < scalar(@saved); $i++) {
+			my $tmp = sprintf("%8s", $saved[$i]);
+			$data .= $tmp;
+		}
+		print $data, "\n";
+	}
+}
+
+
+
+
+# ***** help ***** #
+# ヘルプ
+sub help(){
+print << "HELP";
+ fred3 - Fragment editor for mizuho ABINIT-MP
+  \$ fred3 [OPERATION] INPUT_FILE > OUTPUT_FILE
+
+  OPERATION:
+   * -E, --edit   ajf -> fred_txt
+   * -R, --reload fred_txt -> fred_txt
+   * -O, --output fred_txt -> ajf
+
+  Other option:
+   * -P, --pdb    Reference PDB (if not specify, this program use ReadGeom PDB)
+
+HELP
+}

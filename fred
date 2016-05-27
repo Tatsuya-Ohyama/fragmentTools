@@ -1,0 +1,1038 @@
+#! /usr/bin/env perl
+
+###########################################################################
+##
+## ABINIT-MP フラグメント編集支援プログラム					Last Update 2015/08/07
+##	ABINIT-MPの入力ファイルとその内容をわかりやすい形式にした編集用ファイルを相互変換します
+##	 *編集用ファイル作成
+##	  $ fred --edit ABINIT-MP入力ファイル 編集用ファイル
+##	 *入力ファイル作成
+##	  $ fred --output 編集用ファイル ABINIT-MP入力ファイル
+##	 *編集用ファイルのフラグメント番号をリナンバリング
+##	  $ fred --reload 編集用ファイル 編集用ファイル
+##	 *フラグメント構成原子の番号振り直し
+##	  $ fred --basefix 編集用ファイル 編集用ファイル
+##	 *abinitmp入力ファイル作成
+##	  $ fred --make abinitmp入力ファイル名
+##
+###########################################################################
+
+use strict;
+use Term::ANSIColor qw(:constants);
+use File::Temp;
+
+my $option = shift(@ARGV);
+my $in = shift(@ARGV);
+my $out = shift(@ARGV);
+my $add = shift(@ARGV);
+
+if(($option =~ /^--help$/i) || ($option =~ /^-H$/i)){
+	&help;
+	exit;
+}
+if($option !~ /^$/){
+	if($in !~ /^$/){
+		if(($option =~ /^--make$/i) || ($option =~ /^-M$/i)){
+			&make($in);
+		}
+		elsif(-f $in){
+			my $tmp = File::Temp->new(TEMPLATE => '.fred-mXXXXXX');
+			$SIG{'TERM'} = $SIG{'PIPE'} = $SIG{'HUP'} = $SIG{'INT'} = sub {
+				unlink $tmp;
+				exit;
+			};	# プログラムが中断した場合の処理
+			if(($option =~ /^--edit$/i) || ($option =~ /^-E$/i)){
+				&analysis($in, $tmp);
+			}
+			elsif(($option =~ /^--output$/i) || ($option =~ /^-O$/i) || ($option =~ /^--output5$/i) || ($option =~ /^-O5$/i)){
+				my $version_flag = 3;	# ABINIT-MP 5.0 用
+				if(($option =~ /^--output5$/i) || ($option =~ /^-O5$/i)){
+					$version_flag = 5;
+				}
+				&write($in, $tmp, $version_flag);
+			}
+			elsif(($option =~ /^--reload$/i) || ($option =~ /^-R$/i)){
+				&reload($in, $tmp);
+			}
+			elsif(($option =~ /^--basefix$/i) || ($option =~ /^-B$/i)){
+				&basefix($in, $tmp, $add);
+			}
+			else{
+				print " ERROR: 未定義のオプションです．\n";
+				exit;
+			}
+			if($out =~ /^$/){
+				print " INFORMATION: 出力先が指定されていません．\n";
+				print " INFORMATION: 上書き(O)，別名で保存(S)，何もしない(C)\n > ";
+				my $user = <STDIN>;
+				$user =~ s/\n//;
+				if($user =~ /^O$/i){
+					unlink $in;
+					rename $tmp, $in;
+				}
+				elsif($user =~ /^S$/i){
+					print " ファイル名: ";
+					$user = <STDIN>;
+					$user =~ s/\n//;
+					rename $tmp, $user;
+				}
+				else{
+					exit;
+				}
+			}
+			else{
+				rename $tmp, $out;
+			}
+		}
+		else{
+			print " ERROR: 指定された入力ファイルは存在しません．\n";
+		}
+	}
+	else{
+		print " ERROR: 入力ファイルを指定してください．\n";
+	}
+}
+else{
+	print " ERROR: オプションを指定してください．\n";
+}
+exit;
+
+# --------------- read --------------- #
+## Abinit入力ファイルを読み込み，解析結果を出力
+sub analysis{
+my $in = shift(@_);
+my $out = shift(@_);
+
+my $tmp = File::Temp->new(TEMPLATE => '.fred-rXXXXXX');
+my $flag = 0;			# 作業のためのフラグ
+my $atomnum = 0;		# 対象の原子数
+my $fragmentnum = 0;	# フラグメントの数
+my $fragmentnumc = 0;	# フラグメントをカウント
+my @fragment = ();		# フラグメント構成原子数
+my @charge = ();		# フラグメントの電荷
+my @cap = ();			# フラグメントの末端数
+my @tmpstructure = ();	# フラグメント構成原子（一時的な配列）
+my @structure = ();		# フラグメント構成原子
+my @conection = ();		# フラグメント結合子
+my $fragmentno = 0;	# 処理中のフラグメント番号
+open(ABINIT, "$in");
+open(OPTION, "> $tmp");
+while(<ABINIT>){
+	if($flag == 6){	# フラグメントの結合部位
+		if(/^\s*\n$/){
+			last;
+		}
+		my @data = &split_line(5, $_);
+		foreach(@data){
+			$_ = &adjust(6, $_);
+		}
+		my $line = $data[0] . " - " . $data[1];
+		push(@conection, $line);
+	}
+	elsif($flag == 5){	# フラグメント構成原子の処理
+		my @data = &split_line(5, $_);
+		$fragmentnumc = 0;
+		push(@tmpstructure, @data);
+		foreach(@tmpstructure){
+			$fragmentnumc ++;
+		}
+		if($fragmentnumc == $fragment[$fragmentno]){
+			my $line1 = "";
+			foreach(@tmpstructure){
+				my $line2 = &adjust(6, $_);
+				$line1 = $line1 . $line2;
+			}
+			push(@structure, $line1);
+			@tmpstructure = ();
+			$fragmentno ++;
+			$fragmentnumc = 0;
+		}
+		if($fragmentno == $fragmentnum){
+			$flag = 6;
+			$fragmentnumc = 0;
+		}
+	}
+	elsif($flag == 4){		# フラグメント末端数の処理
+		my @data = &split_line(5, $_);
+		$fragmentnumc = 0;
+		push(@cap, @data);
+		foreach(@cap){
+			$fragmentnumc ++;
+		}
+		if($fragmentnumc == $fragmentnum){
+			$flag = 5;
+			$fragmentnumc = 0;
+		}
+	}
+	elsif($flag == 3){		# フラグメント電荷の処理
+		my @data = &split_line(5, $_);
+		$fragmentnumc = 0;
+		push(@charge, @data);
+		foreach(@charge){
+			$fragmentnumc ++;
+		}
+		if($fragmentnumc == $fragmentnum){
+			$flag = 4;
+			$fragmentnumc = 0;
+		}
+	}
+	elsif($flag == 2){		# フラグメントの構成原子数
+		my @data = &split_line(5, $_);
+		my $sum = 0;
+		$fragmentnumc = 0;
+		push(@fragment, @data);
+		foreach(@fragment){
+			$sum += $_;
+			$fragmentnumc ++;
+		}
+		if($sum == $atomnum){
+			$flag = 3;
+			$fragmentnum = $fragmentnumc;
+			$fragmentnumc = 0;
+		}
+	}
+	elsif($flag == 1){		# オプションが終わり，処理開始
+		print OPTION;
+		if(m|^/|){
+			$flag = 2;
+		}
+	}
+	elsif(/^ReadGeom=/){
+		print OPTION;
+		s/ReadGeom=//;
+		s/\s+//g;
+		s/'//g;
+		s/\s*\n//;
+		if(! -f $_){
+			close(OPTION);
+			unlink $tmp;
+			print " ERROR: 入力ファイルに記述されたPDBファイルがカレントディレクトリに存在しません．\n";
+			exit;
+		}
+		$atomnum = &atom($_);
+		$flag = 1;
+	}
+	else{
+		print OPTION;
+	}
+}
+close(ABINIT);
+close(OPTION);
+
+open(OUT, "> $out");
+print OUT "  FNo.  | charge |   cap   | atoms of fragment\n";
+$fragmentno = 0;
+foreach(@fragment){
+	my $lfragmentno = &adjust(6, $fragmentno + 1);
+	my $lcharge = &adjust(5, $charge[$fragmentno]);
+	my $lcap = &adjust(3, $cap[$fragmentno]);
+	my $line = $lfragmentno . "  |" . $lcharge . "   |" . $lcap . "  |" . $structure[$fragmentno] . "\n";
+	print OUT $line;
+	$fragmentno ++;
+}
+print OUT "\n << Conection >>\n";
+foreach(@conection){
+	print OUT "$_\n";
+}
+
+my $totalcharge = 0;
+foreach(@charge){
+	$totalcharge += $_;
+}
+
+print OUT << "report";
+
+-------------------------------------------------------------------------
+  Total atom     : $atomnum
+  Total fragment : $fragmentno
+  System charge  : $totalcharge
+-------------------------------------------------------------------------
+
+report
+open(OPTION, "$tmp");
+print OUT " << OPTION >>\n";
+while(<OPTION>){
+	if(/^Charge[\s\t]*=/i){
+		print OUT "Charge=$totalcharge\n";
+	}
+	elsif(/^Natom[\s\t]*=/i){
+		print OUT "Natom=$atomnum\n";
+	}
+	elsif(/^Nf[\s\t]*=/i){
+		print OUT "Nf=$fragmentno\n";
+	}
+	else{
+		print OUT;
+	}
+}
+close(OPTION);
+close(OUT);
+}
+
+# --------------- split_line --------------- #
+## 指定された文字数ずつ区切る
+sub split_line{
+my $string_length = shift(@_);	# 区切る文字数
+my $line = shift(@_);	# 与えられる文字列
+$line =~ s/\n//;
+
+my @datas = ();	# 区切られた文字列の集まり
+if($string_length !~ /^0*$/){	# 引数が定義されている場合
+	my $length = length($line);	# 文字数取得
+	my $remainder %= $string_length;	# 指定文字数で割って，余りがなければ実行
+	if($remainder == 0){	# 指定された文字数で割り切れる場合
+		while($line){	# 与えられた文字列がなくなるまで
+			my $data = substr($line, 0, $string_length);	# 文字取得
+			push(@datas, $data);	# データ格納
+			$line =~ s/^.{$string_length}//;	# 先頭から取得分削除
+		}
+	}
+	else{	# 指定された文字数で割り切れない場合
+		print " ERROR: Routine error. String length is not $string_length times: $length\n";
+		exit;
+	}
+}
+else{	# 引数が定義されていない場合
+	print " ERROR: Routine error. String length is invalid: $string_length\n";
+}
+return @datas;
+}
+
+# --------------- write --------------- #
+## 編集ファイルからAbinit入力ファイルへ
+sub write{
+my $in = shift(@_);
+my $out = shift(@_);
+my $version_flag =  shift(@_);
+
+my $tmp1 = File::Temp->new(TEMPLATE => '.fred-w1XXXXXX');	# フラグメントに含まれる原子を記述したファイル
+my $tmp2 = File::Temp->new(TEMPLATE => '.fred-w2XXXXXX');	# フラグメントの結合部位を記述したファイル
+my $tmp3 = File::Temp->new(TEMPLATE => '.fred-w3XXXXXX');	# Abinitの設定を記述したファイル
+
+my $space = 5;
+my $number = 16;
+if($version_flag == 5){
+	$space = 8;
+	$number = 10;
+}
+
+my $fragment = 0;
+my $totalcharge = 0;
+my $flag = 0;
+my @fragments = ();
+my @charge = ();
+my @cap = ();
+
+##データ読み込み・解析
+open(IN, "$in");
+open(OUT1, "> $tmp1");
+open(OUT2, "> $tmp2");
+open(OUT3, "> $tmp3");
+while(<IN>){
+	s/\n//;
+	if(($. == 1) || (/Total/) || (/System/) || (/(--)+/) || (/^$/)){
+		next;
+	}
+	if(/<<\sOPTION/){
+		$flag = 2;
+	}
+	elsif($flag == 2){
+		print OUT3 "$_\n";
+	}
+	elsif(/<<\sConection/){
+		$flag = 1;
+	}
+	elsif($flag == 1){
+		s/\s*//g;
+		my @line = split(/-/, $_);
+		$line[0] = &adjust($space, $line[0]);
+		$line[1] = &adjust($space, $line[1]);
+		$line[0] = $line[0] . $line[1];
+		print OUT2 "$line[0]\n";
+	}
+	else{
+		s/\|/ /g;
+		s/\s+/ /g;
+		s/^\s//;
+		s/\s*$//;
+		my $atom = 0;
+		my @line = split(/\s/, $_);
+		shift(@line);
+		push(@charge, $line[0]);
+		shift(@line);
+		push(@cap, $line[0]);
+		shift(@line);
+		foreach(@line){
+			print OUT1 " $_"; 
+			$atom ++;
+		}
+		print OUT1 "\n";
+		push(@fragments, $atom);
+	}
+}
+close(IN);
+close(OUT1);
+close(OUT2);
+close(OUT3);
+close(ERROR);
+
+my $totalatom = 0;
+foreach(@fragments){	# フラグメント数計算
+	$totalatom += $_;
+}
+my $totalcharge = 0;	# 電荷計算
+foreach(@charge){
+	$totalcharge += $_;
+}
+
+## 出力
+my @flags = (0, 0, 0);
+my $fragment = $#fragments + 1;
+open(OUT, "> $out");
+open(OPTION, "$tmp3");
+if($version_flag == 3){
+	while(<OPTION>){
+		if(/^Charge/){
+			print OUT "Charge=$totalcharge\n";
+			$flags[0] = 1;
+		}
+		elsif(/^Natom/){
+			print OUT "Natom=$totalatom\n";
+			$flags[1] = 1;
+		}
+		elsif(/^Nf/){
+			print OUT "Nf=$fragment\n";
+			$flags[2] = 1;
+		}
+		elsif(m|^/|){
+			if($flags[0] == 0){	# 電荷
+				print OUT "Charge=$totalcharge\n";
+			}
+			if($flags[2] == 0){	# フラグメント数
+				print OUT "Nf=$fragment\n";
+			}
+			if($flags[1] == 0){	# 原子数
+				print OUT "Natom=$totalatom\n";
+			}
+			print OUT "/\n";
+		}
+		else{
+			print OUT;
+		}
+	}
+}
+elsif($version_flag == 5){
+	my @lines = ();
+	while(<OPTION>){
+		s/\n//;
+		push(@lines, $_);
+	}
+	my $line = join(" ", @lines);
+	$line =~ s/\&OPTION//;
+	$line =~ s/^\s+//;
+	$line =~ s/\s*\/\s*$//;
+	undef @lines;
+	
+	my $value = "";
+	
+	# CNTRL
+	print OUT "&CNTRL\n";
+	($line, $value) = &format5($line, "Title", 1, "'NoTitle'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "ElecState", 1, "'S1'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Method", 1, "'MP2'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Nprint", 2, 3);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Memory", 2, 1900);
+	print OUT $value, "\n";
+
+	($line, $value) = &format5($line, "MPIMemSize", 2, 250);
+	print OUT $value, "\n";
+
+	($line, $value) = &format5($line, "Natom", 2, $totalatom);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Charge", 2, $totalcharge);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "ReadGeom", 1, "''");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "WriteGeom", 1, "''");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Gradient", 1, "'NO'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Vector", 1, "'OFF'");
+	print OUT $value, "\n";
+	
+	print OUT "/\n\n";
+	
+	# FMOCNTRL
+	print OUT "&FMOCNTRL\n";
+	($line, $value) = &format5($line, "FMO", 1, "'ON'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "FMO3", 1, "'OFF'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "AutoFrag", 1, "'OFF'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "FragSizeResidue", 2, 1);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "FragSizeNucleotide", 1, "'+base'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "NF", 2, $fragment);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "LigandCharge", 1, "''");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Lptc", 3, "2.0");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Laoc", 3, "0.0");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Ldimer", 3, "2.0");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Dimer_es_multipole", 1, "'NO'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "NP", 2, 1);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "MaxSCCcyc", 2, 250);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "MaxSccEnergy", 3, "5.0E-7");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "Lbuf", 3, "2.0");
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+	
+	# SCF
+	print OUT "&SCF\n";
+	($line, $value) = &format5($line, "MaxSCFenergy", 3, "1.0E-8");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "MaxSCFdensity", 3, "1.0E-6");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "MaxSCFcyc", 2, 150);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "AlterMO", 1, "'0,0'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "VShift", 3, "0.0");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "KShift", 3, "0.0");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "LShift", 3, "0.0");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "IFCD", 1, "'YES'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "THCDINT", 3, "0.0010");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "THCDLD", 3, "1.0E-6");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "NCDBLK", 2, 50);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "CDHF", 1, "'NO'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "CDGRAD", 1, "'NO'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "THINTEG", 3, "1.0E-12");
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+	
+	# BASIS
+	print OUT "&BASIS\n";
+	($line, $value) = &format5($line, "BasisSet", 1, "'6-31G'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "DiffuseOn", 1, "'NO'");
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+	
+	# OPCNTRL
+	print OUT "&OPTCNTRL\n";
+	($line, $value) = &format5($line, "OPT", 1, "'OFF'");
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "MaxCyc", 2, -1);
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+
+	# MFMO
+=put
+	print OUT "&MFMO\n";
+	$line =~ s/Layer\=\d+//i;
+	if($& !~ /^$/){
+		print OUT $&, "\n";
+	}
+	$line =~ s/MethodL2\=\'.*\'//i;
+	if($& !~ /^$/){
+		print OUT $&, "\n";
+	}
+	$line =~ s/FragL2\=\'.*\'//i;
+	if($& !~ /^$/){
+		print OUT $&, "\n";
+	}
+	print OUT "/\n\n";
+=cut
+
+	# XUFF
+	print OUT "&XUFF\n";
+	print OUT "/\n\n";
+
+	# MP2
+	print OUT "&MP2\n";
+	($line, $value) = &format5($line, "NP_MP2_I", 2, 1);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "NP_MP2_IJ", 2, 1);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "NP_MP2_S", 2, 0);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "LPRINT", 2, 2);
+	print OUT $value, "\n";
+	
+	($line, $value) = &format5($line, "MP2_2BODY", 1, "'NO'");
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+
+	# MP2DNS
+	print OUT "&MP2DNS\n";
+	print OUT "/\n\n";
+
+	# MP2GRD
+	print OUT "&MP2GRD\n";
+	print OUT "/\n\n";
+
+	# MP3
+	print OUT "&MP3\n";
+	print OUT "/\n\n";
+
+	# LMP2
+	print OUT "&LMP2\n";
+	print OUT "/\n\n";
+
+	# DFT
+	print OUT "&DFT\n";
+	print OUT "/\n\n";
+
+	# BSSE
+	print OUT "&BSSE\n";
+	($line, $value) = &format5($line, "CP", 1, "'OFF'");
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+
+	# FRAGPAIR
+	print OUT "&FRAGPAIR\n";
+	print OUT "/\n\n";
+
+	# POP
+	print OUT "&POP\n";
+	($line, $value) = &format5($line, "NBOANL", 1, "'OFF'");
+	print OUT $value, "\n";
+	print OUT "/\n\n";
+
+	# XYZ
+	print OUT "&XYZ\n";
+	print OUT "/\n\n";
+	
+	$line =~ s/\s+/ /g;
+	if($line !~ /^$/){
+		print " WARNING: Following keyword is/are disabled\n";
+		print $line, "\n";
+	}
+
+	# FRAGMENT
+	print OUT "&FRAGMENT\n";
+}
+close(OPTION);
+
+&output($space, $number, @fragments);	# 整形
+&output($space, $number, @charge);		# 整形
+&output($space, $number, @cap);			# 整形
+open(ATOM, "$tmp1");
+while(<ATOM>){	# フラグメント構成を書き込み
+	s/^\s//;
+	s/\n//;
+	my @line = split(/\s/, $_);
+	&output($space, $number, @line);
+}
+close(ATOM);
+open(CONECT, "$tmp2");	# 接続情報の書き込み
+while(<CONECT>){
+	print OUT;
+}
+
+if($version_flag == 5){
+	print OUT "/\n";
+}
+close(OUT);
+}
+
+# --------------- reload --------------- #
+## フラグメント番号をリナンバリング
+sub reload{
+my $in = shift(@_);
+my $out = shift(@_);
+
+my $count = 0;
+my $atom = 0;
+my $charge = 0;
+open(IN, "$in");
+open(OUT, "> $out");
+while(<IN>){
+	my $line1 = $_;
+	my $line2 = $line1;
+	$line1 =~ s/\s+//g;
+	if($line1 =~ /^\d+\|-?\d+\|\d+\|\d+/){
+		$count ++;
+		substr($_, 0, 6) = &adjust(6, $count);
+		$line2 =~ s/\|//g;
+		$line2 =~ s/\s+/ /g;
+		$line2 =~ s/^\s//;
+		my @atoms = split(/\s/, $line2);
+		$atom += ($#atoms - 2);
+		$charge += $atoms[1];
+	}
+	elsif(/Total\satom/){
+		$_ = "  Total atom     : $atom\n";
+	}
+	elsif(/Total\sfragment/){
+		$_ = "  Total fragment : $count\n";
+	}
+	elsif(/System charge/){
+		$_ = "  System charge  : $charge\n";
+	}
+	if(/Nf[\s\t]*\=/i){
+		s/^[\s\t]*Nf\=\d+/Nf\=$count/;
+	}
+	elsif(/^[\s\t]*Natom[\s\t]*\=/i){
+		s/^[\s\t]*Natom\=\d+/Natom\=$atom/;
+	}
+	elsif(/^[\s\t]*Charge[\s\t]*\=/i){
+		s/^[\s\t]*Charge[\s\t]*\=.*$/Charge\=$charge/;
+	}
+	print OUT;
+}
+close(IN);
+close(OUT);
+}
+
+# --------------- basefix --------------- #
+## フラグメント構成原子の番号振り直し
+sub basefix{
+my $file = shift(@_);
+my $out = shift(@_);
+my $basenum = shift(@_);
+
+my $flag = 0;
+if($basenum =~ /^$/){
+	$basenum = 0;
+}
+else{
+	$basenum -= $basenum;
+	$flag = 1;
+}
+open(IN, "$file");
+open(OUT, "> $out");
+while(<IN>){
+	my $backup = $_;
+	if($flag == 3){
+		print OUT;
+	}
+	elsif(/-------------------/){
+		$flag = 3;
+		print OUT;
+	}
+	elsif(($flag == 2) && (/\d+\s+-\s+\d+/)){
+		s/\n//;
+		s/-//;
+		s/\s+/ /g;
+		s/^\s//;
+		s/\s$//;
+		my @data = split(/\s/, $_);
+		foreach(@data){
+			$_ = $_ - $basenum;
+			$_ = &adjust(6, $_);
+		}
+		my $line = $data[0] . " - " . $data[1];
+		print OUT $line, "\n";
+	}
+	elsif(/<<\sConection\s>>/){
+		$flag = 2;
+		print OUT;
+	}
+	elsif(($flag <= 1) && (/^\s*\d+\s+\|\s+-?\d\s+\|\s+\d\s+\|/)){
+		my $form = substr($_, 0, 24);
+		substr($_, 0, 24) = "";
+		s/\n//;
+		s/\s+/ /g;
+		s/^\s//;
+		s/\s$//;
+		my @data = split(/\s/, $_);
+		if($flag == 0){
+			$basenum = shift(@data);
+			unshift(@data, $basenum);
+			$basenum --;
+		}
+		my $dataline = "";
+		foreach(@data){
+			$_ = $_ - $basenum;
+			$_ = &adjust(6, $_);
+			$dataline = $dataline . $_;
+		}
+		$form = $form . $dataline;
+		print OUT "$form\n";
+		$flag = 1;
+	}
+	else{
+		print OUT;
+	}
+}
+close(IN);
+close(OUT);
+}
+
+# --------------- make --------------- #
+## abinitmp入力ファイル作成
+sub make{
+my $out = shift(@_);
+
+open(OUT, "> $out");
+print OUT << "ajf";
+&OPTION
+Title='' 
+ReadGeom='.pdb'
+Charge=0
+LigandCharge=''
+Natom=-1
+
+WriteGeom='.cpf'
+Nprint=0
+
+Memory=2000
+Np=1
+
+FMO='ON'
+AutoFrag='ON'
+FragSizeResidue=1
+FragSizeNucleotide='+base'
+
+Method='HF' BasisSet='6-31G'
+
+ajf
+
+print " Qestion: Multi-layer mode ?\n  > ";
+my $user = <STDIN>;
+$user =~ s/\n//;
+if($user =~ /^y$/i){
+	print OUT << "ajf";
+Layer=2
+MethodL2='MP2'
+FragL2=''
+ajf
+}
+
+print OUT << "ajf";
+ElecState='S1'
+DirectSCF='semi'
+MaxScfEnergy=1.0E-8 MaxScfDensity=1.0E-6 MaxScfCyc=150
+VShift=0.0 KShift=0.0 LShift=0.0
+AlterMO='0,0'
+MaxCyc=-1
+MaxSccCyc=250 MaxSccEnergy=5.0E-7
+ApproxLevel=3
+Laoc=0.0  Lptc=2.0 Ldimer=2.0
+/
+
+ajf
+
+close(OUT);
+print " Check: Title, ReadGeom (Input structure), WriteGeom(Output file)\n";
+print " Check: Charge (Charge of structure)\n";
+print " Check: Method (Ex. HF, MP2), BasisSet (Ex. 6-31G)\n";
+if($user =~ /^y$/i){
+	print " Check: FragL2 (Residues of 2nd layer)\n";
+}
+print " Check: LigandCharge (Charge of ligand)\n";
+print " Check: Nprint (Output level; 0: Input check, 3: All),\n        Np (A number of parallel node)\n";
+}
+
+# --------------- atom --------------- #
+## PDBから原子数取得
+sub atom{
+my $pdb = shift(@_);
+
+my $atom = 0;
+open(IN, "$pdb");
+while(<IN>){
+	if((/^HETATM/i) || (/^ATOM/i)){
+		$atom ++;
+	}
+}
+close(IN);
+return $atom;
+}
+
+# =============== adjust =============== #
+sub adjust{
+my $max = shift(@_);	# 調整後文字数
+my $line = shift(@_);	# 文字列
+
+my $space = length($line);	# 文字列の長さ
+$space = $max - $space;		# 追加するスペース数
+$space = " " x $space;			# スペース
+$line = $space . $line;		# スペース追加
+return($line);
+}
+
+# --------------- output --------------- #
+## 入力ファイル出力
+sub output{
+my $space = shift(@_);
+my $number = shift(@_);
+my @data = @_;
+my $column = 0;
+my $line = "";
+foreach(@data){
+	$_ = &adjust($space, $_);
+	$column ++;
+	print OUT;
+	if($column == $number){
+		$column = 0;
+		print OUT "\n";
+	}
+}
+if($column != 0){
+	print OUT "\n";
+}
+return $line;
+}
+
+# --------------- range --------------- #
+sub range{
+my $numarray = shift(@_);		# 原子群情報
+
+my @numarray1 = split(/,/, $numarray);
+my @numarray2 = ();		# 範囲指定情報も含めた最終的情報を格納する
+my $count = 0;				# numarray2の配列番号
+foreach(@numarray1){
+	if(/-/){	# x-y等の範囲指定を認識
+		my @wide = split(/-/, $_);	# 開始と終了に分ける
+		if($wide[0] =~ /^$/){	# 開始がない場合
+			$wide[0] = 1;
+		}
+		elsif($wide[1] =~ /^$/){	# 終了がない場合
+			$numarray2[$count++] = $wide[0];
+			$numarray2[$count++] = -1;
+			last;
+		}
+		my $i = 0;
+		for($i = $wide[0]; $i <= $wide[1]; $i++){	# 範囲をすべて数字にする
+			$numarray2[$count++] = $i;
+		}
+	}
+	else{
+		$numarray2[$count++] = $_;
+	}
+}
+return(@numarray2);
+}
+
+# =============== format5 =============== #
+# ABINIT-MP 5.0 用の制御キーワード整形
+# $data: 処理対象データ
+# $key: キーワード
+# $type: データの種類(1: 文字列，2: 整数，3: 浮動小数)
+# $default: デフォルト値
+sub format5{
+my $data = shift(@_);
+my $key = shift(@_);
+my $type = shift(@_);
+my $default = shift(@_);
+
+my $key_tmp = lc($key);	# index は大文字小文字区別するので一時的に小文字に変換
+my $data_tmp = lc($data);	# index は大文字小文字区別するので一時的に小文字に変換
+my $exist = index($data_tmp, $key_tmp);	# 該当データが存在するか
+
+my @datas = ();
+my $get_value = "";
+if($exist != -1){	# 存在する場合
+	if($type == 1){		# 文字列の場合
+		my $start_pos = index($data, $key);
+		my $end_pos = index($data, "'", $start_pos + 1);
+		$end_pos = index($data, "'", $end_pos + 1);
+		$get_value = substr($data, $start_pos, $end_pos + 1 - $start_pos);
+		substr($data, $start_pos, $end_pos + 1 - $start_pos) = "";
+	}
+	elsif($type == 2){		# 整数の場合
+		$data =~ s/$key\=-?\d+//i;
+		$get_value = $&;
+	}
+	elsif($type == 3){		# 浮動小数の場合
+		$data =~ s/$key\=-?\d+(\.\d+)?(E-?\d+)?//i;
+		$get_value = $&;
+	}
+	else{
+		print "ERROR: Subroutine error: format5: $key\n";
+		exit;
+	}
+	@datas = split(/=/, $get_value, 2);
+	$datas[0] = $key;
+}
+else{
+	@datas = ($key, $default);
+}
+
+my $value = join("=", @datas);
+
+return $data, $value;
+}
+
+# --------------- help --------------- #
+sub help{
+print << "HELP";
+ ABINIT-MP フラグメント編集支援プログラム
+  *編集用ファイル作成
+   \$ fred --edit ABINIT-MP入力ファイル 編集用ファイル
+  *入力ファイル作成
+   \$ fred --output 編集用ファイル ABINIT-MP入力ファイル
+  *編集用ファイルのフラグメント番号をリナンバリング
+   \$ fred --reload 編集用ファイル 編集用ファイル
+  *フラグメント構成原子の番号振り直し
+   \$ fred --basefix 編集用ファイル 編集用ファイル
+  *abinitmp入力ファイル作成
+   \$ fred --make abinitmp入力ファイル名
+
+HELP
+}
