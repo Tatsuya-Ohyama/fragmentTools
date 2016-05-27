@@ -124,10 +124,10 @@ while(my $line = <IN>){
 		}
 		if(scalar(@datas) != 0){	# 構成原子がある場合(重複により原子がなくなったら、フラグメントは削除(出力しない))
 			for (my $i = 0; $i < scalar(@datas); $i++) {	# フラグメント構成原子情報の再構築
-				$datas[$i] = sprintf("%5s", $datas[$i]);
+				$datas[$i] = sprintf("%8s", $datas[$i]);
 				$lines[3] = join(" ", @datas);
 			}
-			printf("%6s  |%5s   |%3s  | %s\n", @lines);
+			printf("%7s |%6s  |%3s  |%s\n", @lines);
 		}
 		$flag_read = 1;
 	}
@@ -135,22 +135,22 @@ while(my $line = <IN>){
 		for (my $i = 0; $i < scalar(@atoms); $i++) {	# フラグメント構成原子情報の再構築
 			my @lines = ($last_frag + $i + 1, "*", "*", "");
 			for (my $j = 0; $j < scalar(@{$atoms[$i]}); $j++) {
-				$atoms[$i][$j] = sprintf("%5s", $atoms[$i][$j]);
+				$atoms[$i][$j] = sprintf("%8s", $atoms[$i][$j]);
 				$lines[3] = join(" ", @{$atoms[$i]});
 			}
 			print STDERR "Added new fragment (", $frag_pdbs[$i], ") as fragment No. ", $last_frag + $i + 1, "\n";
-			printf("%6s  |%5s   |%3s  | %s\n", @lines);
+			printf("%7s |%6s  |%3s  |%s\n", @lines);
 		}
 		print $line;
 		$flag_read = 0;
 	}
-	elsif($line =~ /^[\s\t]*\d+[\s\t]*-[\s\t]*\d+/){	# 接続情報
+	elsif($line =~ /^[\s\t]*\d+[\s\t]*[\s\t]*\d+/){	# 接続情報
 		$flag_read = 2;
 		print $line;
 	}
 	elsif($flag_read == 2){
 		for (my $i = 0; $i < scalar(@atoms); $i++) {
-			print "     * -      *\n";
+			printf(" %7s %7s\n", "*", "*");
 		}
 		print $line;
 		$flag_read = 0;

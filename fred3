@@ -199,8 +199,7 @@ sub edit(){
 	print "  FNo.  | charge | BDA | atoms of fragment\n";
 	$fragment = 0;
 	for($fragment = 0; $fragment < scalar(@fragment_atom_numbers); $fragment++) {
-		printf("%7s |%6s  |%3s  |", $fragment + 1, $charges[$fragment], $BDAs[$fragment]);
-		print &adjust_array($fragment_atoms[$fragment]), "\n";
+		printf("%7s |%6s  |%3s  |%s\n", $fragment + 1, $charges[$fragment], $BDAs[$fragment], &adjust_array($fragment_atoms[$fragment]));
 	}
 	print "\n << connections >>\n";
 	for($fragment = 0; $fragment < scalar(@connections); $fragment++) {
@@ -342,7 +341,7 @@ sub output(){
 			$flag_read = 1;
 			next;
 		}
-		elsif($line =~ /=+<\snamelist\s>=+/){	# このラベル以降はネームリスト
+		elsif($line =~ /=+<\snamelist\s>=+/i){	# このラベル以降はネームリスト
 			$flag_read = 2;
 			next;
 		}
