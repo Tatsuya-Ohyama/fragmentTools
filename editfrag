@@ -11,7 +11,7 @@
 use strict;
 
 my $base_pdb = "";
-my $frag_pdb = "";
+my @frag_pdbs = ();
 my $fred = "";
 
 my $flag_arg = 0;
@@ -34,8 +34,7 @@ foreach my $arg (@ARGV){
 		$flag_arg = 0;
 	}
 	elsif($flag_arg == 2){
-		$frag_pdb = &check_file($arg);
-		$flag_arg = 0;
+		push(@frag_pdbs, &check_file($arg));
 	}
 	elsif($flag_arg == 3){
 		$fred = &check_file($arg);
@@ -43,28 +42,42 @@ foreach my $arg (@ARGV){
 	}
 }
 
-if(($base_pdb eq "") || ($frag_pdb eq "") || ($fred eq "")){
+if(($base_pdb eq "") || (scalar(@frag_pdbs) == 0) || ($fred eq "")){
 	print STDERR "ERROR: Not enough arguments\n";
 	exit;
 }
 
 
 # 新フラグメントファイル読み込み
-my @resnames = ();
-my @resnums = ();
-my @coords = ();
-open(IN, $frag_pdb);
-while(my $line = <IN>){
-	if($line =~ /^((ATOM)|(HETATM))/){
-		push(@resnames, substr($line, 17, 3));
-		push(@resnums, substr($line, 22, 4));
-		push(@coords, substr($line, 30, 24));
+my @atoms = ();	# ファイル(フラグメント)ごとの原子順序番号
+my @resnames = ();	# ファイル(フラグメント)ごとの残基名を格納した2次配列
+my @resnums = ();	# ファイル(フラグメント)ごとの残基番号を格納した2次配列
+my @coords = ();	# ファイル(フラグメント)ごとの座標を格納した2次配列
+foreach my $frag_pdb (@frag_pdbs){
+	my @atoms_u = ();
+	my @resnames_u = ();
+	my @resnums_u = ();
+	my @coords_u = ();
+	open(IN, $frag_pdb);
+	while(my $line = <IN>){
+		if($line =~ /^((ATOM)|(HETATM))/){
+			push(@atoms_u, substr($line, 6, 5));
+			push(@resnames_u, substr($line, 17, 3));
+			push(@resnums_u, substr($line, 22, 4));
+			push(@coords_u, substr($line, 30, 24));
+		}
 	}
+	close(IN);
+
+	push(@atoms, [@atoms_u]);
+	push(@resnames, [@resnames_u]);
+	push(@resnums, [@resnums_u]);
+	push(@coords, [@coords_u]);
 }
-close(IN);
+
 
 # FMO に使うベースとなる PDB
-my @atoms = ();
+my @check_atoms = ();	# fred 内の重複チェック用
 open(IN, $base_pdb);
 while(my $line = <IN>){
 	if($line =~ /^((ATOM)|(HETATM))/){
@@ -73,22 +86,21 @@ while(my $line = <IN>){
 		my $coord = substr($line, 30, 24);
 
 		# 新フラグメントファイルと同一の原子かチェック
-		my $match = 0;
 		for (my $i = 0; $i < scalar(@coords); $i++) {
-			if(($resname eq $resnames[$i]) && ($resnum eq $resnums[$i]) && ($coord eq $coords[$i])){
-				$match = 1;
-				last;
+			for (my $j = 0; $j < scalar(@{$coords[$i]}); $j++) {
+				if(($resname eq $resnames[$i][$j]) && ($resnum eq $resnums[$i][$j]) && ($coord eq $coords[$i][$j])){
+					my $atom = substr($line, 6, 5);
+					$atom =~ s/[\s\t]+//g;
+					$atoms[$i][$j] = $atom;
+					push(@check_atoms, $atom);
+					last;
+				}
 			}
-		}
-
-		if($match == 1){
-			my $atom = substr($line, 6, 5);
-			$atom =~ s/[\s\t]+//g;
-			push(@atoms, $atom);
 		}
 	}
 }
 close(IN);
+
 
 # fred ファイル内の重複削除と新フラグメントの追加
 my $flag_read = 0;
@@ -100,8 +112,8 @@ while(my $line = <IN>){
 		$last_frag = $lines[0];
 		$lines[3] =~ s/[\s\t]*\n$//;
 		my @datas = split(/[\s\t]+/, $lines[3]);	# フラグメント構成原子を配列に格納
-		for (my $i = 0; $i < scalar(@atoms); $i++) {	# 新しく定義するフラグメントの原子順序番号でループ
-			my @results = grep {$atoms[$i] == $datas[$_]} 0..$#datas;	# 新しく定義するフラグメントの原子順序番号と、現在のフラグメント構成原子情報で重複する原子をリストアップ
+		for (my $i = 0; $i < scalar(@check_atoms); $i++) {	# 新しく定義するフラグメントの原子順序番号でループ
+			my @results = grep {$check_atoms[$i] == $datas[$_]} 0..$#datas;	# 新しく定義するフラグメントの原子順序番号と、現在のフラグメント構成原子情報で重複する原子をリストアップ
 			if(scalar(@results) != 0){	# 新フラグメントと重複する原子があった場合
 				for (my $j = $#results; 0 <= $j; $j--) {	# 結果の後ろから順に削除 (前からだと)
 					splice(@datas, $results[$j], 1);
@@ -120,14 +132,15 @@ while(my $line = <IN>){
 		$flag_read = 1;
 	}
 	elsif($flag_read == 1){		# これまでフラグメントデータの次の行(PDBのフラグメントの追加)
-		$last_frag ++;
-		my @lines = ($last_frag, "*", "*", "");
 		for (my $i = 0; $i < scalar(@atoms); $i++) {	# フラグメント構成原子情報の再構築
-			$atoms[$i] = sprintf("%5s", $atoms[$i]);
-			$lines[3] = join(" ", @atoms);
+			my @lines = ($last_frag + $i + 1, "*", "*", "");
+			for (my $j = 0; $j < scalar(@{$atoms[$i]}); $j++) {
+				$atoms[$i][$j] = sprintf("%5s", $atoms[$i][$j]);
+				$lines[3] = join(" ", @{$atoms[$i]});
+			}
+			print STDERR "Added new fragment (", $frag_pdbs[$i], ") as fragment No. ", $last_frag + $i + 1, "\n";
+			printf("%6s  |%5s   |%3s  | %s\n", @lines);
 		}
-		print STDERR "Added new fragment as fragment No. $last_frag\n";
-		printf("%6s  |%5s   |%3s  | %s\n", @lines);
 		print $line;
 		$flag_read = 0;
 	}
@@ -136,7 +149,9 @@ while(my $line = <IN>){
 		print $line;
 	}
 	elsif($flag_read == 2){
-		print "     * -      *\n";
+		for (my $i = 0; $i < scalar(@atoms); $i++) {
+			print "     * -      *\n";
+		}
 		print $line;
 		$flag_read = 0;
 	}
@@ -160,7 +175,7 @@ sub check_file(){
 # ===== help ===== #
 sub help(){
 print << "HELP";
- \$ editfrag -f FRED_FILE -b PDB_FILE -n PDB_FILE > NEW_FRED
+ \$ editfrag -f FRED_FILE -b PDB_FILE -n PDB_FILE1 [PDB_FILE2 ...] > NEW_FRED
 
 
 HELP
