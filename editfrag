@@ -31,12 +31,15 @@ foreach my $arg (@ARGV){
 	}
 	elsif($flag_arg == 1){
 		$base_pdb = &check_file($arg);
+		$flag_arg = 0;
 	}
 	elsif($flag_arg == 2){
 		$frag_pdb = &check_file($arg);
+		$flag_arg = 0;
 	}
 	elsif($flag_arg == 3){
 		$fred = &check_file($arg);
+		$flag_arg = 0;
 	}
 }
 
