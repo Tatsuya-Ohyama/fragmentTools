@@ -492,41 +492,34 @@ foreach(@fragments){
 		$total_fragment ++;
 
 		# 整形
-		my $frag_no = sprintf("%7s", $total_fragment);
 		if($charges[$i] eq "TER"){
 			$charges[$i] = "ERR";
-			print STDERR " WARNING: 分割方法が不明で電荷を特定できないフラグメントが存在します($frag_no)\n";
+			print STDERR " WARNING: 分割方法が不明で電荷を特定できないフラグメントが存在します($total_fragment)\n";
 		}
-		$charges[$i] = sprintf("%5s", $charges[$i]);
 
 		if($bdas[$i] eq "TER"){
 			$bdas[$i] = "ER";
-			print STDERR " WARNING: 分割方法が不明でBDAを特定できないフラグメントが存在します($frag_no)\n";
-		}
-		else{
-			$bdas[$i] = sprintf("%2s", $bdas[$i]);
+			print STDERR " WARNING: 分割方法が不明でBDAを特定できないフラグメントが存在します($total_fragment)\n";
 		}
 
 		my @fragment_elems = split(/\s/, $fragments[$i]);
 		foreach(@fragment_elems){
-			$_ = sprintf("%7s", $_);
+			$_ = sprintf("%8s", $_);
 		}
 		$fragments[$i] = join(" ", @fragment_elems);
 
-		print "$frag_no | $charges[$i]  | $bdas[$i]  | $fragments[$i]\n";
+		printf("%7s |%6s  |%3s  |%s\n", $total_fragment, $charges[$i], $bdas[$i], $fragments[$i]);
+#		print "$frag_no |$charges[$i]  | $bdas[$i]  | $fragments[$i]\n";
 	}
 	$i ++;
 }
 
 # 接続情報の出力
-print "\n<< Conection >>\n";
+print "\n<< connections >>\n";
 foreach(@connectivities){
 	# 整形
 	my @datas = split(/\s/, $_);
-	$datas[0] = sprintf("%6s", $datas[0]);
-	$datas[1] = sprintf("%6s", $datas[1]);
-
-	print join(" - ", @datas), "\n";
+	printf(" %7s %7s\n", $datas[0], $datas[1]);
 }
 
 # 計算オプションの出力
@@ -584,6 +577,9 @@ AJF
 }
 elsif($version eq "m"){
 print << "AJF";
+
+
+===============< namelist >===============
 &CNTRL
   Title='$title'
   ElecState='S1'
@@ -615,11 +611,11 @@ print << "AJF";
   MaxSCCcyc=250
   MaxSccEnergy=5.0E-7
   Lbuf=2.0
-  NBody=2
   FragSizeAminoacid='+amino'
   esp_ptc_multipole='NO'
   MaxSCCenergy=5.0E-7
   LMOTYP='ANO'
+  NBody=2
 /
 
 &SCF
@@ -806,7 +802,7 @@ my $residue_name = shift(@_);
 my @amino_acids = ("ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL");
 my @nucleic_acids = ("DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "DNA_base");
 my @waters = ("SOL", "WAT", "HOH");
-my @ions = ("Na", "Mg", "Ca", "Cl", "Zn", "CAL", "ZIN");
+my @ions = ("Na", "Mg", "K", "Ca", "Cl", "Zn", "CAL", "ZIN");
 
 # アミノ酸: 1
 my @results = grep(/^$residue_name$/, @amino_acids);
