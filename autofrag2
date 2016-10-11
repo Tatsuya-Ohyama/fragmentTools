@@ -515,7 +515,7 @@ foreach(@fragments){
 }
 
 # 接続情報の出力
-print "\n<< connections >>\n";
+print "\n<< connections (ex. \"Next_fragment_atom   Prev_fragment_atom\") >>\n";
 foreach(@connectivities){
 	# 整形
 	my @datas = split(/\s/, $_);
@@ -855,6 +855,10 @@ print << "HELP";
  Translate PDB_FILE to fred format file
   \$ $script_name [-s] <PDB_FILE> [> <OUTPUT>]
     -s, --separate: Nucleotide was devided into sugar+phosphate group and base
+    -V, --version : ajf version
+                    3: ABINIT-MP 3
+                    5: ABINIT-MP 5 or later
+                    m: mizuho ABINIT-MP
 
    and then ...
   \$ fred -o <OUTPUT> <ajf_FILE>

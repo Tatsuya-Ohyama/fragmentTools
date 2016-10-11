@@ -201,7 +201,7 @@ sub edit(){
 	for($fragment = 0; $fragment < scalar(@fragment_atom_numbers); $fragment++) {
 		printf("%7s |%6s  |%3s  |%s\n", $fragment + 1, $charges[$fragment], $BDAs[$fragment], &adjust_array($fragment_atoms[$fragment]));
 	}
-	print "\n << connections >>\n";
+	print "\n << connections (ex. \"Next_fragment_atom    Prev_fragment_atom\")>>\n";
 	for($fragment = 0; $fragment < scalar(@connections); $fragment++) {
 		print $connections[$fragment], "\n";
 	}
