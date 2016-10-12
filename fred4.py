@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-fred3 - fragment editor for mizuho ABINIT-MP
+fred4 - fragment editor for mizuho ABINIT-MP
 """
 
 import sys, os, re
@@ -95,7 +95,8 @@ if __name__ == '__main__':
 	re_quote_h = re.compile(r"^['\"]")
 	re_quote_t = re.compile(r"['\"]$")
 	re_empty = re.compile(r"^[\s\t]*$")
-	re_endline = re.compile(r"^[\s\t]*/$")
+	re_namelist_h = re.compile(r"^[\s\t]*\&")
+	re_namelist_t = re.compile(r"^[\s\t]*/$")
 
 	if args.edit == True:
 		# 編集ファイルに変換
@@ -266,6 +267,7 @@ if __name__ == '__main__':
 		fragment = 0
 		charge = 0
 		atom = 0
+		output = []
 
 		re_connection = re.compile(r"<<\sconnections")
 		re_readmark = re.compile(r"=+<\snamelist\s>=+")
@@ -280,15 +282,20 @@ if __name__ == '__main__':
 			for line in obj_input:
 				line = line.strip()
 
-				if re_connection.search(line):
-					# 接続情報取得
+				if re_empty.search(line):
+					continue
+
+				elif re_connection.search(line):
+					# 接続情報取得フラグ
 					flag_read = 1
+					line = "\n<< connections (ex. \"Next_fragment_atom    Prev_fragment_atom\") >>"
 
 				elif re_readmark.search(line):
-					# 計算条件取得
+					# ネームリスト取得フラグ
 					flag_read = 2
+					line = "\n\n===============< namelist >==============="
 
-				if flag_read == 0:
+				elif flag_read == 0:
 					# フラグメント情報取得
 					if re_data.search(line):
 						fragment += 1
@@ -298,9 +305,20 @@ if __name__ == '__main__':
 						atoms = re_wsp.split(datas[3])
 						atom += len(atoms)
 						atoms = map(lambda data : "%8s" % data, atoms)
-						line = datas[0] + " |" + datas[1] + "  |" + datas[2] + "  |" + "".join(atoms)
+						line = "%7s |%6s  |%3s  |%s" % (datas[0], datas[1], datas[2], " ".join(atoms))
+
+				elif flag_read == 1:
+					# 接続情報取得
+					datas = re_wsp.split(line)
+					line = "".join(list(map(lambda data : "%8s" % data, datas)))
 
 				elif flag_read == 2:
+					# ネームリスト取得
+					if re_namelist_t.search(line):
+						line = "/\n"
+					elif not re_namelist_h.search(line):
+						line = "  " + line
+
 					if re_namelist_ajf.search(line):
 						flag_namelist = 1
 
@@ -318,7 +336,7 @@ if __name__ == '__main__':
 							sys.stderr.write("Charge:   %d\n" % charge)
 							charge = "-"
 
-						elif re_endline.search(line):
+						elif re_namelist_t.search(line):
 							line = ""
 							if atom != "-":
 								line += "  Natom=%d\n" % atom
@@ -326,7 +344,7 @@ if __name__ == '__main__':
 							elif charge != "-":
 								line += "  Charge=%d\n" % charge
 								sys.stderr.write("Charge:   %d\n" % charge)
-							line += "/"
+							line += "/\n"
 							flag_namelist = 0
 
 					elif flag_namelist == 2:
@@ -335,16 +353,18 @@ if __name__ == '__main__':
 							line = re.sub(r"\d+", str(fragment), line)
 							sys.stderr.write("Fragment: %d\n" % fragment)
 							fragment = "-"
-						elif re_endline.search(line):
+						elif re_namelist_t.search(line):
 							line = ""
 							if fragment != "-":
 								line += "  NF=%d" % fragment
 								sys.stderr.write("Fragment: %d\n" % fragment)
 							line += "/"
 							flag_namelist = 0
+						elif re_namelist_t.search(line):
+							line = "/\n"
 
-					print(line)
-
+				output.append(line)
+		write_data(output, args.output_path)
 
 
 	elif args.output == True:
@@ -368,7 +388,6 @@ if __name__ == '__main__':
 		re_autofrag = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
 		re_fragment = re.compile(r"\&FRAGMENT", re.IGNORECASE)
 		re_coord = re.compile(r"\{\.{3}\}")
-		re_namelist = re.compile(r"^[\s\t]*\&")
 
 		with open(args.input) as obj_input:
 			line_count = 0
@@ -455,10 +474,10 @@ if __name__ == '__main__':
 								output.append(line)
 						continue
 
-					if re_namelist.search(line):
+					if re_namelist_h.search(line):
 						flag_output = 1
 
-					elif re_endline.search(line):
+					elif re_namelist_t.search(line):
 						flag_output = 2
 
 
