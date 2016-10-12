@@ -17,6 +17,7 @@ re_quote_t = re.compile(r"['\"]$")
 re_empty = re.compile(r"^[\s\t]*$")
 re_namelist_h = re.compile(r"^[\s\t]*\&")
 re_namelist_t = re.compile(r"^[\s\t]*/$")
+re_pdb_atom = re.compile(r"^((HETATM)|(ATOM))")
 
 # ネームリスト更新
 re_natom = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
@@ -66,6 +67,46 @@ def split_n(line, length):
 	return datas
 
 
+# check_charge
+def check_charge(fragment_members, charges, pdb):
+	atom_charges = {"H": 1, "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8, "F": 9, "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15, "S": 16, "Cl": 17, "K": 19, "Ca": 20, "Fe": 26, "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30, "Br": 35}
+	atom_orders = []
+	atom_types = []
+	re_digit = re.compile(r"[\d\s]+")
+
+	with open(pdb, "r") as obj_pdb:
+		for line in obj_pdb:
+			if re_pdb_atom.search(line):
+				atom_orders.append(line[6:11].strip())
+				atom = re_digit.sub("", line[12:14].strip())
+				if atom == "HO":
+					atom = "H"
+				atom_types.append(atom)
+				if not atom in atom_charges:
+					sys.stderr.write("ERROR: Unknown atomtype (%s)\n" % atom)
+					sys.exit(1)
+				# atom_chages.append(atom_charges[atom])
+
+	flag_error = 0
+	for i in range(len(fragment_members)):
+		charge = 0
+		for j in range(len(fragment_members[i])):
+			charge += atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
+		charge += charges[i]
+		if charge % 2 != 0:
+			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n       charge of fragment No. %d is %d.\n\n" % (i + 1, charge))
+			flag_error = 1
+
+	if flag_error == 1:
+		sys.stderr.write("ERROR: The number of electrons for some fragments were not even number.\n       Prceeding? (y/N): ")
+		sys.stderr.flush()
+		user = sys.stdin.readline().rstrip("\r\n")
+		if not (user == "Y" or user == "y"):
+			sys.exit(0)
+	else:
+		sys.stderr.write("INFO: check_charge is ok.\n")
+
+
 # convert_ajf
 def convert_ajf(lists, width, n):
 	lists = list(map(lambda data : str(data), lists))
@@ -79,6 +120,10 @@ def convert_ajf(lists, width, n):
 		if i != 0 and (i + 1) % n == 0:
 			index += 1
 			new_lists.append("")
+
+	if len(new_lists[len(new_lists) - 1]) == 0:
+		# 指定された個数でちょうど終わる場合は、無駄な要素が追加されるので削除する
+		del(new_lists[len(new_lists) - 1])
 
 	return new_lists
 
@@ -121,9 +166,7 @@ def load_ajf(file_input, file_reference):
 				elif "ReadGeom" in line:
 					if file_reference != None:
 						# 参照 PDB が指定されていた場合
-						if not os.path.exists(file_reference):
-							sys.stderr.write("ERROR: No such PDB file (%s)\n" % file_reference)
-							sys.exit(1)
+						check_file(file_reference)
 					else:
 						# 参照 PDB が指定されていない場合
 						file_reference = re_wsp.sub("", line)
@@ -134,7 +177,6 @@ def load_ajf(file_input, file_reference):
 					check_file(file_reference)
 
 					with open(file_reference, "r") as obj_pdb:
-						re_pdb_atom = re.compile(r"^((HETATM)|(ATOM))")
 						for p_line in obj_pdb:
 							if re_pdb_atom.search(p_line):
 								atom += 1
@@ -361,6 +403,7 @@ if __name__ == '__main__':
 
 		parser_output = subparser.add_parser("output", help = "Convert fred to ajf (fred -> ajf)")
 		parser_output.set_defaults(func = "output")
+		parser_output.add_argument("-p", "--pdb", metavar = "PDB", help = "Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_output.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
 		parser_output.add_argument("input", help = "fred")
 
@@ -468,6 +511,23 @@ if __name__ == '__main__':
 
 		# 読み込み
 		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input)
+
+		file_reference = ""
+		if args.pdb != None:
+			check_file(args.pdb)
+			file_reference = args.pdb
+		else:
+			for item in namelists:
+				if "ReadGeom" in item:
+					file_reference = item.strip()
+					file_reference = re_wsp.sub("", file_reference)
+					file_reference = file_reference.replace("ReadGeom=", "")
+					file_reference = re_quote_h.sub("", file_reference)
+					file_reference = re_quote_t.sub("", file_reference)
+					check_file(file_reference)
+					break
+
+		check_charge(fragment_members, charges, file_reference)
 
 		# 整形
 		output = []
