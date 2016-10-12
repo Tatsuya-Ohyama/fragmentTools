@@ -42,7 +42,7 @@ def check_overwrite(file):
 	if os.path.exists(file):
 		sys.stderr.write("WARN: %s exists. Overwrite it? (y/N): " % file)
 		sys.stderr.flush()
-		user = sys.stdin.readline()
+		user = sys.stdin.readline().strip("\r\n")
 		if not (user == "Y" or user == "y"):
 			sys.exit(0)
 		else:
@@ -517,6 +517,7 @@ if __name__ == '__main__':
 		write_data(output, args.output_path)
 
 	elif args.func == "autofrag":
+		pass
 
 
 	elif args.func == "editfrag":
