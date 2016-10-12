@@ -341,19 +341,52 @@ def write_data(contents, output):
 
 # =============== main =============== #
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description = "Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
-	parser.add_argument("input", help = "Input file")
-	group = parser.add_mutually_exclusive_group(required = True)
-	group.add_argument("--edit", "-E", action="store_true", default = False, help = "ajf -> fred_text")
-	group.add_argument("--reload", "-R", action="store_true", default = False, help = "fred_text -> fred_text")
-	group.add_argument("--output", "-O", action="store_true", default = False, help = "fred_text -> ajf")
-	parser.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
-	parser.add_argument("-p", "--pdb", metavar = "PDB", help = "Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
-	args = parser.parse_args()
+	try:
+		parser = argparse.ArgumentParser(description = "Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
+		parser.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+
+		subparser = parser.add_subparsers(help = "Sub-command")
+		subparser.required = True
+
+		parser_edit = subparser.add_parser("edit", help = "Convert ajf to fred (ajf -> fred)")
+		parser_edit.set_defaults(func = "edit")
+		parser_edit.add_argument("-p", "--pdb", metavar = "PDB", help = "Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_edit.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+		parser_edit.add_argument("input", help = "ajf file")
+
+		parser_rewrite = subparser.add_parser("rewrite", help = "Rewrite fred fred -> fred")
+		parser_rewrite.set_defaults(func = "rewrite")
+		parser_rewrite.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+		parser_rewrite.add_argument("input", help = "fred")
+
+		parser_output = subparser.add_parser("output", help = "Convert fred to ajf (fred -> ajf)")
+		parser_output.set_defaults(func = "output")
+		parser_output.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+		parser_output.add_argument("input", help = "fred")
+
+		parser_autofrag = subparser.add_parser("autofrag", help = "Auto fragmentation for PDB (pdb -> fred)")
+		parser_autofrag.set_defaults(func = "autofrag")
+		parser_autofrag.add_argument("-s", "--separate", action = "store_true", help = "Nucleotide is separates to base and sugar+phosphate")
+		parser_autofrag.add_argument("-v", "--version", choices = ["3", "5", "m"], help = "ajf version: 3 = abinit-mp3, 5 = abinitmp5, m = mizuho")
+		parser_autofrag.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+		parser_autofrag.add_argument("input", help = "PDB")
+
+		parser_editfrag = subparser.add_parser("editfrag", help = "Create new fred in which fragments were devided based on PDB and fred (pdb + fred -> fred)")
+		parser_editfrag.set_defaults(func = "editfrag")
+		parser_editfrag.add_argument("-f", metavar = "fred", dest = "fred", required = True, help = "fred")
+		parser_editfrag.add_argument("-b", metavar = "pdb", dest = "pdb", required = True, help = "pdb")
+		parser_editfrag.add_argument("-n", metavar = "pdb", dest = "pdb", required = True, nargs = "+", help = "pdb for each fragments")
+		parser_editfrag.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+		parser_editfrag.add_argument("input", help = "PDB")
+
+		args = parser.parse_args()
+	except TypeError:
+		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
+		sys.exit(1)
 
 	check_file(args.input)
 
-	if args.edit == True:
+	if args.func == "edit":
 		# 編集ファイルに変換
 
 		# 読み込み
@@ -393,7 +426,7 @@ if __name__ == '__main__':
 		write_data(output, args.output_path)
 
 
-	elif args.reload == True:
+	elif args.func == "rewrite":
 		# リロード
 
 		# 読み込み
@@ -430,7 +463,7 @@ if __name__ == '__main__':
 		# 書き出し
 		write_data(output, args.output_path)
 
-	elif args.output == True:
+	elif args.func == "output":
 		# ajf ファイルに変換
 
 		# 読み込み
@@ -483,6 +516,8 @@ if __name__ == '__main__':
 		# 出力
 		write_data(output, args.output_path)
 
-	else:
-		sys.stderr.write("ERROR: Unknown action")
-		sys.exit(1)
+	elif args.func == "autofrag":
+
+
+	elif args.func == "editfrag":
+		pass
