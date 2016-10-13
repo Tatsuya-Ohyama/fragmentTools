@@ -91,7 +91,11 @@ def check_charge(fragment_members, charges, pdb):
 	for i in range(len(fragment_members)):
 		charge = 0
 		for j in range(len(fragment_members[i])):
-			charge += atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
+			try:
+				charge += atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
+			except ValueError:
+				sys.stderr.write("ERROR: %d is not in list. Check the atom order in fred and pdb file.\n" % fragment_members[i][j])
+				sys.exit(1)
 		charge += charges[i]
 		if charge % 2 != 0:
 			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n       charge of fragment No. %d is %d.\n\n" % (i + 1, charge))
