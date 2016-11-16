@@ -548,7 +548,7 @@ LigandCharge='$ligand'
 Natom=$total_atom
 Nf=$total_fragment
 
-Memory=1900
+Memory=1800
 Np=1
 Nprint=3
 
@@ -585,7 +585,7 @@ print << "AJF";
   ElecState='S1'
   Method='MP2'
   Nprint=3
-  Memory=1600
+  Memory=1800
   Natom=$total_atom
   Charge=$total_charge
   ReadGeom='$in'
@@ -682,7 +682,7 @@ print << "AJF";
 /
 
 &PIEDA
-  EnergyDecomposition='NO'
+  EnergyDecomposition='YES'
 /
 
 &BSSE
