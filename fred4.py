@@ -7,7 +7,6 @@ fred4 - fragment editor for mizuho ABINIT-MP
 
 import sys, os, re
 import argparse
-import functools
 
 # =============== common variables =============== #
 # general
@@ -216,7 +215,7 @@ def load_ajf(file_input, file_reference):
 						fragment += len(datas)
 						fragment_atoms.extend(datas)
 
-						atom_now += functools.reduce(lambda x, y: x + y, datas)
+						atom_now += sum(datas)
 						if atom == atom_now:
 							# PDB の総原子数と現在の原子数が一致した場合
 							flag_read = 2
@@ -331,7 +330,7 @@ def load_fred(file_input):
 				fragment = len(fragment_members)
 
 				# 電荷の合計算出
-				charge = functools.reduce(lambda x, y: x + y, charges)
+				charge = sum(charges)
 
 			elif flag_read == 0:
 				# フラグメント情報
@@ -453,7 +452,7 @@ if __name__ == '__main__':
 		for line in namelists:
 			if re_natom.search(line):
 				# 原子数の更新
-				atom = functools.reduce(lambda x, y : x + y, fragment_atoms)
+				atom = sum(fragment_atoms)
 				line = re.sub(r"\d+", str(atom), line)
 			elif re_nf.search(line):
 				# フラグメント数の更新
@@ -461,7 +460,7 @@ if __name__ == '__main__':
 				line = re.sub(r"\d+", str(fragment), line)
 			elif re_charge.search(line):
 				# 電荷の更新
-				charge = functools.reduce(lambda x, y : x + y, charges)
+				charge = sum(charges)
 				line = re.sub(r"-?\d+", str(charge), line)
 			elif re_autofrag.search(line):
 				# autofrag の更新
@@ -492,7 +491,7 @@ if __name__ == '__main__':
 		for line in namelists:
 			if re_natom.search(line):
 				# 原子数の更新
-				atom = functools.reduce(lambda x, y : x + y, fragment_atoms)
+				atom = sum(fragment_atoms)
 				line = re.sub(r"\d+", str(atom), line)
 			elif re_nf.search(line):
 				# フラグメント数の更新
@@ -500,7 +499,7 @@ if __name__ == '__main__':
 				line = re.sub(r"\d+", str(fragment), line)
 			elif re_charge.search(line):
 				# 電荷の更新
-				charge = functools.reduce(lambda x, y : x + y, charges)
+				charge = sum(charges)
 				line = re.sub(r"-?\d+", str(charge), line)
 			elif re_autofrag.search(line):
 				# autofrag の更新
@@ -539,7 +538,7 @@ if __name__ == '__main__':
 		for line in namelists:
 			if re_natom.search(line):
 				# 原子数の更新
-				atom = functools.reduce(lambda x, y : x + y, fragment_atoms)
+				atom = sum(fragment_atoms)
 				line = re.sub(r"\d+", str(atom), line)
 			elif re_nf.search(line):
 				# フラグメント数の更新
@@ -547,7 +546,7 @@ if __name__ == '__main__':
 				line = re.sub(r"\d+", str(fragment), line)
 			elif re_charge.search(line):
 				# 電荷の更新
-				charge = functools.reduce(lambda x, y : x + y, charges)
+				charge = sum(charges)
 				line = re.sub(r"-?\d+", str(charge), line)
 			elif re_autofrag.search(line):
 				# autofrag の更新
