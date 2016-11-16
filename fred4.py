@@ -7,6 +7,9 @@ fred4 - fragment editor for mizuho ABINIT-MP
 
 import sys, os, re
 import argparse
+sys.path.append("modules")
+import basic, fred, autofrag, editfrag
+
 
 # =============== common variables =============== #
 # general
@@ -28,44 +31,6 @@ re_coord = re.compile(r"\{\.{3}\}")
 
 
 # =============== functions =============== #
-# check_file
-def check_file(file):
-	if not os.path.exists(file):
-		sys.stderr.write("ERROR: No such file (%s)\n" % file)
-		sys.exit(1)
-	else:
-		return file
-
-
-# check_overwrite
-def check_overwrite(file):
-	if os.path.exists(file):
-		sys.stderr.write("WARN: %s exists. Overwrite it? (y/N): " % file)
-		sys.stderr.flush()
-		user = sys.stdin.readline().strip("\r\n")
-		if not (user == "Y" or user == "y"):
-			sys.exit(0)
-		else:
-			return file
-
-
-# split_n
-def split_n(line, length):
-	line = line.rstrip("\r\n")
-	datas = []
-	pos = 0
-	while pos + length <= len(line):
-		datas.append(line[pos : pos + length])
-		pos += length
-
-	if pos != len(line):
-		datas.append(line[pos:len(line)])
-
-	datas = list(map(lambda data:data.strip(), datas))
-
-	return datas
-
-
 # check_charge
 def check_charge(fragment_members, charges, pdb):
 	atom_charges = {"H": 1, "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8, "F": 9, "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15, "S": 16, "Cl": 17, "K": 19, "Ca": 20, "Fe": 26, "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30, "Br": 35}
@@ -169,7 +134,7 @@ def load_ajf(file_input, file_reference):
 				elif "ReadGeom" in line:
 					if file_reference != None:
 						# 参照 PDB が指定されていた場合
-						check_file(file_reference)
+						basic.check_exist(file_reference, 2)
 					else:
 						# 参照 PDB が指定されていない場合
 						file_reference = re_wsp.sub("", line)
@@ -177,7 +142,7 @@ def load_ajf(file_input, file_reference):
 						file_reference = re_quote_h.sub("", file_reference)
 						file_reference = re_quote_t.sub("", file_reference)
 
-					check_file(file_reference)
+					basic.check_exist(file_reference, 2)
 
 					with open(file_reference, "r") as obj_pdb:
 						for p_line in obj_pdb:
@@ -202,7 +167,7 @@ def load_ajf(file_input, file_reference):
 
 				else:
 					# 8 文字ずつ区切る
-					datas = list(map(lambda data : int(data), split_n(line, 8)))
+					datas = list(map(lambda data : int(data), basic.split_n(line, 8)))
 
 					if flag_read == 1:
 						# フラグメント構成原子取得
@@ -379,7 +344,7 @@ def write_data(contents, output):
 			print(line)
 	else:
 		if args.flag_overwrite == False:
-			check_overwrite(output)
+			basic.check_overwrite(output)
 		with open(output, "w") as obj_output:
 			for line in contents:
 				obj_output.write("%s\n" % line)
@@ -432,7 +397,7 @@ if __name__ == '__main__':
 		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
 		sys.exit(1)
 
-	check_file(args.input)
+	basic.check_exist(args.input, 2)
 
 	if args.func == "edit":
 		# 編集ファイルに変換
@@ -519,7 +484,7 @@ if __name__ == '__main__':
 
 		file_reference = ""
 		if args.pdb != None:
-			check_file(args.pdb)
+			basic.check_exist(args.pdb, 2)
 			file_reference = args.pdb
 		else:
 			for item in namelists:
@@ -529,7 +494,7 @@ if __name__ == '__main__':
 					file_reference = file_reference.replace("ReadGeom=", "")
 					file_reference = re_quote_h.sub("", file_reference)
 					file_reference = re_quote_t.sub("", file_reference)
-					check_file(file_reference)
+					basic.check_exist(file_reference, 2)
 					break
 
 		check_charge(fragment_members, charges, file_reference)
