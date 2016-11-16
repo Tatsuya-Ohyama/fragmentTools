@@ -378,7 +378,8 @@ def write_data(contents, output):
 		for line in contents:
 			print(line)
 	else:
-		check_overwrite(output)
+		if args.flag_overwrite == False:
+			check_overwrite(output)
 		with open(output, "w") as obj_output:
 			for line in contents:
 				obj_output.write("%s\n" % line)
@@ -389,6 +390,7 @@ if __name__ == '__main__':
 	try:
 		parser = argparse.ArgumentParser(description = "Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
 		parser.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
+		parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 
 		subparser = parser.add_subparsers(help = "Sub-command")
 		subparser.required = True
