@@ -1,0 +1,167 @@
+===============< namelist >===============
+&CNTRL
+  Title='$title'
+  ElecState='S1'
+  Method='MP2'
+  Nprint=3
+  Memory=1800
+  Natom=$total_atom
+  Charge=$total_charge
+  ReadGeom='$in'
+  WriteGeom='$cpf'
+  Gradient='NO'
+  Vector='OFF'
+  CPFBIN='NO'
+/
+
+&FMOCNTRL
+  FMO='ON'
+  FMO3='OFF'
+  AutoFrag='OFF'
+  FragSizeResidue=1
+  FragSizeNucleotide='$option_nuc'
+  NF=$total_fragment
+  LigandCharge='$ligand'
+  Lptc=2.0
+  Laoc=0.0
+  Ldimer=2.0
+  Dimer_es_multipole='NO'
+  NP=1
+  MaxSCCcyc=250
+  MaxSccEnergy=5.0E-7
+  Lbuf=2.0
+  FragSizeAminoacid='+amino'
+  esp_ptc_multipole='NO'
+  MaxSCCenergy=5.0E-7
+  LMOTYP='ANO'
+  NBody=2
+/
+
+&SCF
+  MaxSCFenergy=1.0E-8
+  MaxSCFdensity=1.0E-6
+  MaxSCFcyc=500
+  AlterMO='0,0'
+  VShift=0.0
+  KShift=0.0
+  LShift=0.0
+  IFCD='YES'
+  THCDINT=0.0010
+  THCDLD=1.0E-6
+  NCDBLK=50
+  CDHF='NO'
+  CDGRAD='NO'
+  THINTEG=1.0E-12
+  DIISTYPE='C2_OLD'
+/
+
+&BASIS
+  BasisSet='6-31G*'
+  DiffuseOn='NO'
+/
+
+&OPTCNTRL
+  OPT='OFF'
+  MaxCyc=-1
+/
+
+&MLFMO
+/
+
+&XUFF
+/
+
+&MP2
+  NP_MP2_I=1
+  NP_MP2_IJ=1
+  NP_MP2_S=0
+  LPRINT=2
+  MP2_2BODY='NO'
+  NBODY=2
+  MemoryMP2=0
+  PSSCAL=1.0
+  CHKFZC='YES'
+  OSSCAL=1.0
+  IFSCS='YES'
+/
+
+&MP2DNS
+/
+
+&MP2GRD
+/
+
+&MP3
+/
+
+&LMP2
+/
+
+&DFT
+/
+
+&PIEDA
+  EnergyDecomposition='YES'
+/
+
+&BSSE
+  CP='OFF'
+/
+
+&FRAGPAIR
+/
+
+&SOLVATION
+  EFFECT='OFF'
+/
+
+&PBEQ
+  JDGCNV='RMS'
+  MAXITR=1000
+  THRCNV=1.0E-5
+/
+
+&POP
+  NBOANL='OFF'
+  ESPFIT='OFF'
+/
+
+&GRIDCNTRL
+  GRID='NO'
+/
+
+&MCP
+/
+
+&CIS
+/
+
+&CISGRD
+/
+
+&CAFI
+  LPRINT=2
+  METLOC='PIPE'
+  CHKFZC='NO'
+  IFLOC='OCC'
+/
+
+&POL
+/
+
+&GF2
+/
+
+&CCPT
+/
+
+&XYZ
+/
+
+&FRAGMENT
+{...}
+/
+
+&MDCNTRL
+/
+

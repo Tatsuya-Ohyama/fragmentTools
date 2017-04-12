@@ -1,0 +1,43 @@
+-------------------------------------------------------------------------
+  Total atom     : $total_atom
+  Total fragment : $total_fragment
+  System charge  : $total_charge
+-------------------------------------------------------------------------
+
+ << OPTION >>
+&OPTION
+Title='$title'
+ReadGeom='$in'
+WriteGeom='$cpf'
+
+Charge=$total_charge
+LigandCharge='$ligand'
+Natom=$total_atom
+Nf=$total_fragment
+
+Memory=1800
+Np=1
+Nprint=3
+
+FMO='ON'
+AutoFrag='OFF'
+FragSizeResidue=1
+FragSizeNucleotide='$option_nuc'
+
+Method='HF' BasisSet='6-31G'
+
+Layer=2
+MethodL2='MP2'
+FragL2=''
+
+ElecState='S1'
+DirectSCF='semi'
+MaxScfEnergy=1.0E-8 MaxScfDensity=1.0E-6 MaxScfCyc=500
+VShift=0.0 KShift=0.0 LShift=0.0
+AlterMO='0,0'
+MaxCyc=-1
+MaxSccCyc=250 MaxSccEnergy=5.0E-7
+ApproxLevel=3
+Laoc=0.0  Lptc=2.0 Ldimer=2.0
+/
+
