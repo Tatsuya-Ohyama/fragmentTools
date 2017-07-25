@@ -78,6 +78,8 @@ def check_charge(fragment_members, charges, pdb):
 			if re_pdb_atom.search(line):
 				atom_orders.append(line[6:11].strip())
 				atom = re_digit.sub("", line[12:14].strip())
+				atom = re_quote_h.sub("", atom)
+				atom = re_quote_t.sub("", atom)
 				if atom == "HO":
 					atom = "H"
 				atom_types.append(atom)
