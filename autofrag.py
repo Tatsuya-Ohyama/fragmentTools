@@ -83,7 +83,7 @@ class FragmentData:
 				if self.flag_sep:
 					# 塩基原子を sep_atoms に移動させる
 					for key, value in ref_atom_idx.items():
-						if not ("'" in value or "P" in value or re_termH.match(value)):
+						if not ("'" in value or "P" in value or re_termH1.match(value) or re_termH2.match(value)):
 							# 接続情報追加
 							if ("DC" in self.residue_name or "DT" in self.residue_name) and value == "N1":
 								self.sep_connectivity[1] = key
@@ -129,7 +129,8 @@ residue_types = {
 re_sign = re.compile(r"[-\+\*\'\"]")
 re_head = re.compile(r"^([\d'\s])")
 re_ter = re.compile(r"^TER")
-re_termH = re.compile(r"H[53]T")
+re_termH1 = re.compile(r"H[53]T")
+re_termH2 = re.compile(r"HO[53]")
 program_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
 template_files = [
 	os.path.join(program_dir, "template", "autofrag_3.templ"),
