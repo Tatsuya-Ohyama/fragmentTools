@@ -345,6 +345,11 @@ def load_fred(file_input):
 				# フラグメント情報
 				datas = line.split("|")
 				datas = list(map(lambda data : data.strip(), datas))
+				for item in datas:
+					if item == "":
+						sys.stderr.write("ERROR: Invalid format in line {0}.\n".format(line_count))
+						sys.exit(1)
+
 				charges.append(int(datas[1]))
 				BDAs.append(int(datas[2]))
 				tmp = list(map(lambda data : int(data), re_wsp.split(datas[3])))
