@@ -5,7 +5,9 @@
 fred4 - fragment editor for mizuho ABINIT-MP
 """
 
-import sys, os, re
+import sys, os, re, signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 import argparse
 
 # =============== common variables =============== #
@@ -91,15 +93,20 @@ def check_charge(fragment_members, charges, pdb):
 	flag_error = 0
 	for i in range(len(fragment_members)):
 		charge = 0
+		electron_info = []
 		for j in range(len(fragment_members[i])):
 			try:
 				charge += atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
+				electron_info.append("{0:>5} {1} = {2}\n".format(fragment_members[i][j], atom_types[atom_orders.index(str(fragment_members[i][j]))], atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]))
 			except ValueError:
 				sys.stderr.write("ERROR: %d is not in list. Check the atom order in fred and pdb file.\n" % fragment_members[i][j])
 				sys.exit(1)
 		charge += charges[i]
 		if charge % 2 != 0:
-			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n       charge of fragment No. %d is %d.\n\n" % (i + 1, charge))
+			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n       The number of electrons in fragment No. %d is %d.\n" % (i + 1, charge))
+			for error_line in electron_info:
+				sys.stderr.write("       " + error_line)
+			sys.stderr.write("\n")
 			flag_error = 1
 
 	if flag_error == 1:
