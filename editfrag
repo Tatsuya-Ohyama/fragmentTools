@@ -82,13 +82,12 @@ open(IN, $base_pdb);
 while(my $line = <IN>){
 	if($line =~ /^((ATOM)|(HETATM))/){
 		my $resname = substr($line, 17, 3);
-		my $resnum = substr($line, 22, 4);
 		my $coord = substr($line, 30, 24);
 
 		# 新フラグメントファイルと同一の原子かチェック
 		for (my $i = 0; $i < scalar(@coords); $i++) {
 			for (my $j = 0; $j < scalar(@{$coords[$i]}); $j++) {
-				if(($resname eq $resnames[$i][$j]) && ($resnum eq $resnums[$i][$j]) && ($coord eq $coords[$i][$j])){
+				if(($resname eq $resnames[$i][$j]) && ($coord eq $coords[$i][$j])){
 					my $atom = substr($line, 6, 5);
 					$atom =~ s/[\s\t]+//g;
 					$atoms[$i][$j] = $atom;
