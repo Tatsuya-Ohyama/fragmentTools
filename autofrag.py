@@ -99,7 +99,7 @@ class FragmentData:
 				ref_atom_idx = self.atom_idxs.copy()
 				for key, value in ref_atom_idx.items():
 					# フラグメントで移動させる
-					if "5" not in self.residue_name and value in ["P", "O1P", "O2P", "C5'", "O5'", "C5*", "O5*", "H5'", "H5''", "H5'1", "H5'2"]:
+					if "5" not in self.residue_name and value in ["P", "O1P", "O2P", "OP1", "OP2", "C5'", "O5'", "C5*", "O5*", "H5'", "H5''", "H5'1", "H5'2"]:
 						# 接続情報追加
 						if value == "C5'":
 							self.connectivity[0] = key
