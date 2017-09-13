@@ -31,7 +31,9 @@ class FragmentData:
 
 	def append_data(self, atom_order, atom_type, residue_name):
 		""" データを追加する関数 """
-		self.atom_idxs[atom_order] = atom_type
+		self.atom_idxs[atom_order] = atom_type.replace("+", "").replace("-", "")
+		if self.atom_idxs[atom_order] in residue_types["Ion"] and ("+" in residue_name or "-" in residue_name):
+			residue_name = residue_name.replace("+", "").replace("-", "")
 		self.residue_name = residue_name
 
 	def terminate(self):
