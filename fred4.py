@@ -9,7 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-from py_module_basic import basic
+import basic_func
 
 # =============== common variables =============== #
 # general
@@ -423,7 +423,7 @@ if __name__ == '__main__':
 		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
 		sys.exit(1)
 
-	basic.check_exist(args.input_path, 2)
+	basic_func.check_exist(args.input_path, 2)
 
 	if args.func == "edit":
 		# 編集ファイルに変換
@@ -520,7 +520,7 @@ if __name__ == '__main__':
 					file_reference = file_reference.replace("ReadGeom=", "")
 					file_reference = re_quote_h.sub("", file_reference)
 					file_reference = re_quote_t.sub("", file_reference)
-					basic.check_exist(file_reference, 2)
+					basic_func.check_exist(file_reference, 2)
 					break
 
 		check_charge(fragment_members, charges, file_reference)
@@ -571,7 +571,7 @@ if __name__ == '__main__':
 
 		# 出力
 		if args.flag_overwrite == False:
-			basic.check_overwrite(args.output_path)
+			basic_func.check_overwrite(args.output_path)
 		write_data(output, args.output_path)
 
 	elif args.func == "autofrag":

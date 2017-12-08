@@ -9,9 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "modules"))
-from py_module_basic import basic
+import basic_func
 
 
 # =============== class =============== #
@@ -158,7 +156,7 @@ if __name__ == '__main__':
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
 
-	basic.check_exist(args.input, 2)
+	basic_func.check_exist(args.input, 2)
 
 	template_file = ""
 	if args.version == "3":
@@ -169,7 +167,7 @@ if __name__ == '__main__':
 		template_file = template_files[2]
 	else:
 		template_file = args.version
-	basic.check_exist(template_file, 2)
+	basic_func.check_exist(template_file, 2)
 
 	option_nuc = "+base"
 	if args.flag_sep:
@@ -304,7 +302,7 @@ if __name__ == '__main__':
 
 	# 出力
 	if args.flag_overwrite == False:
-		basic.check_overwrite(args.output)
+		basic_func.check_overwrite(args.output)
 
 	cnt_fragment = 0
 	with open(args.output, "w") as obj_output:

@@ -9,7 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-from py_module_basic import basic
+import basic_func
 
 
 # =============== class =============== #
@@ -231,14 +231,14 @@ if __name__ == '__main__':
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
 
-	basic.check_exist(args.base_structure, 2)
+	basic_func.check_exist(args.base_structure, 2)
 	base_structure = MoleculeInformation(args.base_structure)
 
-	basic.check_exist(args.fred, 2)
+	basic_func.check_exist(args.fred, 2)
 	obj_fred = FredData(args.fred)
 
 	for new_structure_file in args.add_structures:
-		basic.check_exist(new_structure_file, 2)
+		basic_func.check_exist(new_structure_file, 2)
 		new_structure = MoleculeInformation(new_structure_file)
 		new_structure.update_index(base_structure)
 		obj_fred.add_fragment(FragmentData(new_structure.output_fragmentdata()))
