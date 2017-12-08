@@ -9,9 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "modules"))
-from py_module_basic import basic
+import basic_func
 
 
 # =============== class =============== #
@@ -31,7 +29,9 @@ class FragmentData:
 
 	def append_data(self, atom_order, atom_type, residue_name):
 		""" データを追加する関数 """
-		self.atom_idxs[atom_order] = atom_type
+		self.atom_idxs[atom_order] = atom_type.replace("+", "").replace("-", "")
+		if self.atom_idxs[atom_order] in residue_types["Ion"] and ("+" in residue_name or "-" in residue_name):
+			residue_name = residue_name.replace("+", "").replace("-", "")
 		self.residue_name = residue_name
 
 	def terminate(self):
@@ -99,7 +99,7 @@ class FragmentData:
 				ref_atom_idx = self.atom_idxs.copy()
 				for key, value in ref_atom_idx.items():
 					# フラグメントで移動させる
-					if "5" not in self.residue_name and value in ["P", "O1P", "O2P", "C5'", "O5'", "C5*", "O5*", "H5'", "H5''", "H5'1", "H5'2"]:
+					if "5" not in self.residue_name and value in ["P", "O1P", "O2P", "OP1", "OP2", "C5'", "O5'", "C5*", "O5*", "H5'", "H5''", "H5'1", "H5'2"]:
 						# 接続情報追加
 						if value == "C5'":
 							self.connectivity[0] = key
@@ -156,7 +156,7 @@ if __name__ == '__main__':
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
 
-	basic.check_exist(args.input, 2)
+	basic_func.check_exist(args.input, 2)
 
 	template_file = ""
 	if args.version == "3":
@@ -167,7 +167,7 @@ if __name__ == '__main__':
 		template_file = template_files[2]
 	else:
 		template_file = args.version
-	basic.check_exist(template_file, 2)
+	basic_func.check_exist(template_file, 2)
 
 	option_nuc = "+base"
 	if args.flag_sep:
@@ -302,7 +302,7 @@ if __name__ == '__main__':
 
 	# 出力
 	if args.flag_overwrite == False:
-		basic.check_overwrite(args.output)
+		basic_func.check_overwrite(args.output)
 
 	cnt_fragment = 0
 	with open(args.output, "w") as obj_output:

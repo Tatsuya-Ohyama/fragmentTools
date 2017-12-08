@@ -9,6 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
+import basic_func
 
 # =============== common variables =============== #
 # general
@@ -30,27 +31,6 @@ re_coord = re.compile(r"\{\.{3}\}")
 
 
 # =============== functions =============== #
-# check_file
-def check_file(file):
-	if not os.path.exists(file):
-		sys.stderr.write("ERROR: No such file (%s)\n" % file)
-		sys.exit(1)
-	else:
-		return file
-
-
-# check_overwrite
-def check_overwrite(file):
-	if os.path.exists(file):
-		sys.stderr.write("WARN: %s exists. Overwrite it? (y/N): " % file)
-		sys.stderr.flush()
-		user = sys.stdin.readline().strip("\r\n")
-		if not (user == "Y" or user == "y"):
-			sys.exit(0)
-		else:
-			return file
-
-
 # split_n
 def split_n(line, length):
 	line = line.rstrip("\r\n")
@@ -388,63 +368,62 @@ def load_fred(file_input):
 
 # write_data (データの書き出し; ファイルが指定されていた場合はファイルに書き出し)
 def write_data(contents, output):
-	if output == None:
+	with open(output, "w") as obj_output:
 		for line in contents:
-			print(line)
-	else:
-		check_overwrite(output)
-		with open(output, "w") as obj_output:
-			for line in contents:
-				obj_output.write("%s\n" % line)
+			obj_output.write("%s\n" % line)
 
 
 # =============== main =============== #
 if __name__ == '__main__':
 	try:
 		parser = argparse.ArgumentParser(description = "Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
-		parser.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
 
 		subparser = parser.add_subparsers(help = "Sub-command")
 		subparser.required = True
 
 		parser_edit = subparser.add_parser("edit", help = "Convert ajf to fred (ajf -> fred)")
 		parser_edit.set_defaults(func = "edit")
-		parser_edit.add_argument("-p", "--pdb", metavar = "PDB", help = "Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
-		parser_edit.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
-		parser_edit.add_argument("input", help = "ajf file")
+		parser_edit.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "ajf file")
+		parser_edit.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "output file")
+		parser_edit.add_argument("-p", "--pdb", metavar = "PDB", help = "reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_edit.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
 
 		parser_rewrite = subparser.add_parser("rewrite", help = "Rewrite fred fred -> fred")
 		parser_rewrite.set_defaults(func = "rewrite")
-		parser_rewrite.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
-		parser_rewrite.add_argument("input", help = "fred")
+		parser_rewrite.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "fred")
+		parser_rewrite.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
+		parser_rewrite.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
 
 		parser_output = subparser.add_parser("output", help = "Convert fred to ajf (fred -> ajf)")
 		parser_output.set_defaults(func = "output")
+		parser_output.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "fred")
+		parser_output.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
 		parser_output.add_argument("-p", "--pdb", metavar = "PDB", help = "Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
-		parser_output.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
-		parser_output.add_argument("input", help = "fred")
+		parser_output.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
 
 		parser_autofrag = subparser.add_parser("autofrag", help = "Auto fragmentation for PDB (pdb -> fred)")
 		parser_autofrag.set_defaults(func = "autofrag")
+		parser_autofrag.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "PDB")
+		parser_autofrag.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
 		parser_autofrag.add_argument("-s", "--separate", action = "store_true", help = "Nucleotide is separates to base and sugar+phosphate")
 		parser_autofrag.add_argument("-v", "--version", choices = ["3", "5", "m"], help = "ajf version: 3 = abinit-mp3, 5 = abinitmp5, m = mizuho")
-		parser_autofrag.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
-		parser_autofrag.add_argument("input", help = "PDB")
+		parser_autofrag.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
 
 		parser_editfrag = subparser.add_parser("editfrag", help = "Create new fred in which fragments were devided based on PDB and fred (pdb + fred -> fred)")
 		parser_editfrag.set_defaults(func = "editfrag")
+		parser_editfrag.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "PDB")
+		parser_editfrag.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
 		parser_editfrag.add_argument("-f", metavar = "fred", dest = "fred", required = True, help = "fred")
 		parser_editfrag.add_argument("-b", metavar = "pdb", dest = "pdb", required = True, help = "pdb")
 		parser_editfrag.add_argument("-n", metavar = "pdb", dest = "pdb", required = True, nargs = "+", help = "pdb for each fragments")
-		parser_editfrag.add_argument("-o", metavar = "OUTPUT", dest = "output_path", help = "Output (Default: STDOUT)")
-		parser_editfrag.add_argument("input", help = "PDB")
+		parser_editfrag.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
 
 		args = parser.parse_args()
 	except TypeError:
 		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
 		sys.exit(1)
 
-	check_file(args.input)
+	basic_func.check_exist(args.input_path, 2)
 
 	if args.func == "edit":
 		# 編集ファイルに変換
@@ -527,7 +506,7 @@ if __name__ == '__main__':
 		# ajf ファイルに変換
 
 		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input)
+		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input_path)
 
 		file_reference = ""
 		if args.pdb != None:
@@ -541,7 +520,7 @@ if __name__ == '__main__':
 					file_reference = file_reference.replace("ReadGeom=", "")
 					file_reference = re_quote_h.sub("", file_reference)
 					file_reference = re_quote_t.sub("", file_reference)
-					check_file(file_reference)
+					basic_func.check_exist(file_reference, 2)
 					break
 
 		check_charge(fragment_members, charges, file_reference)
@@ -591,6 +570,8 @@ if __name__ == '__main__':
 			output.append(line)
 
 		# 出力
+		if args.flag_overwrite == False:
+			basic_func.check_overwrite(args.output_path)
 		write_data(output, args.output_path)
 
 	elif args.func == "autofrag":
