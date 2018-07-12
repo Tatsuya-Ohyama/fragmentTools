@@ -69,8 +69,11 @@ class FredData:
 
 	def add_connection(self, connection):
 		""" フラグメントの接続情報を増やすメソッド """
-		for i in range(connection):
-			self._connection.append(["*", "*"])
+		if isinstance(connection, int):
+			for i in range(connection):
+				self._connection.append(["*", "*"])
+		elif isinstance(connection, list):
+			self._connection.append(connection)
 		return self
 
 
@@ -89,7 +92,7 @@ class FredData:
 		re_NF = re.compile(r"NF=[\s\t]*-?\d+")
 		tmp_fragments = sorted([[obj_fragment.get_min_idx(), obj_fragment] for obj_fragment in self._fragments], key = lambda x : x[0])
 		self._fragments = [obj_fragment[1].update_fragment_index(idx + 1) for idx, obj_fragment in enumerate(tmp_fragments)]
-		self._connection
+		self._connection = sorted(self._connection, key = lambda x : x[0])
 
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")

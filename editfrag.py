@@ -21,6 +21,7 @@ if __name__ == '__main__':
 	parser.add_argument("-n", dest = "add_structures", metavar = "ADD.pdb", required = True, nargs = "+", help = "fragment structure")
 	parser.add_argument("-f", dest = "fred", metavar = "BASE.fred", required = True, help = "original fred file")
 	parser.add_argument("-o", dest = "output_file", metavar = "NEW.fred", required = True, help = "output fred")
+	parser.add_argument("-c", dest = "connection", metavar = "ATOM1-ATOM2", nargs = "+", help = "connection list (Ex: :EG@C9-:EG@C10  34-25)")
 	parser.add_argument("-m", dest = "flag_multi", action = "store_true", default = False, help = "applying separation to other the same type residues")
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
@@ -49,7 +50,19 @@ if __name__ == '__main__':
 		cnt_total += cnt
 		sys.stderr.write("Replace {0} fragments with {1}\n".format(cnt, new_structure_file))
 
-	if cnt_total % len(args.add_structures) == 0:
+	if args.connection is not None:
+		re_num = re.compile(r'^\d+-\d+$')
+		for connection in args.connection:
+			connections = connection.split("-", 2)
+			if re_num.search(connection):
+				obj_fred.add_connection(connections)
+			else:
+				mask_list1 = base_structure.convert_number(connections[0])
+				mask_list2 = base_structure.convert_number(connections[1])
+				for mask1, mask2 in zip(mask_list1, mask_list2):
+					obj_fred.add_connection([mask1, mask2])
+
+	elif cnt_total % len(args.add_structures) == 0:
 		obj_fred.add_connection(int(cnt_total / len(args.add_structures)))
 	else:
 		obj_fred.add_connection(1)
