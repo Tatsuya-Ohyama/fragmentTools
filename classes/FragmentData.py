@@ -4,16 +4,24 @@
 import sys
 import re
 
+# =============== variables =============== #
+re_int = re.compile(r"^-?\d+$")
+
 # =============== classes =============== #
 class FragmentData:
 	""" フラグメントデータのクラス """
 	def __init__(self, line):
+		# member
+		self._idx = None
+		self._charge = 0
+		self._bda = 0
+		self._atoms = []
+
+		# initiation
 		line = line.strip("\r\n")
 		datas = [x.strip() for x in line.split("|")]
-
-		re_int = re.compile(r"^-?\d+$")
 		self._idx = int(datas[0])
-		self._charge = 0
+
 		if re_int.search(datas[1]):
 			self._charge = int(datas[1])
 		else:
@@ -30,10 +38,12 @@ class FragmentData:
 	def update_fragment_index(self, index):
 		""" フラグメント番号を更新するメソッド """
 		self._idx = index
+		return self
 
 	def duplicate_atom(self, atoms):
 		""" フラグメント構成原子の重複を削除するメソッド """
 		self._atoms = sorted(list(set(self._atoms) - set(atoms)))
+		return self
 
 	def get_fragment_index(self):
 		""" フラグメント番号を返すメソッド """
@@ -50,6 +60,10 @@ class FragmentData:
 	def get_atoms(self):
 		""" 構成原子を返すメソッド """
 		return self._atoms
+
+	def get_min_idx(self):
+		""" 構成原子の最小インデックスを返すメソッド """
+		return min(self._atoms)
 
 
 # =============== main =============== #

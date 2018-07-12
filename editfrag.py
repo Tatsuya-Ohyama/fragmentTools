@@ -21,21 +21,38 @@ if __name__ == '__main__':
 	parser.add_argument("-n", dest = "add_structures", metavar = "ADD.pdb", required = True, nargs = "+", help = "fragment structure")
 	parser.add_argument("-f", dest = "fred", metavar = "BASE.fred", required = True, help = "original fred file")
 	parser.add_argument("-o", dest = "output_file", metavar = "NEW.fred", required = True, help = "output fred")
+	parser.add_argument("-m", dest = "flag_multi", action = "store_true", default = False, help = "applying separation to other the same type residues")
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
 
+	# 構造ファイルの読み込み
 	check_exist(args.base_structure, 2)
 	base_structure = MoleculeInformation(args.base_structure)
 
+	# fred ファイルの読み込み
 	check_exist(args.fred, 2)
 	obj_fred = FredData(args.fred)
 
+	# 構造の追加
+	cnt_total = 0
 	for new_structure_file in args.add_structures:
+		# 追加構造ファイルで回す
+		# 構造の読み込み
 		check_exist(new_structure_file, 2)
 		new_structure = MoleculeInformation(new_structure_file)
-		new_structure.update_index(base_structure)
-		obj_fred.add_fragment(FragmentData(new_structure.output_fragmentdata()))
-		sys.stderr.write("Added new fragment ({0}) to end of fragments\n".format(new_structure_file))
+
+		# 構造の追加
+		cnt = 0
+		for record in new_structure.output_fragmentdata(base_structure, args.flag_multi):
+			obj_fred.add_fragment(FragmentData(record))
+			cnt += 1
+		cnt_total += cnt
+		sys.stderr.write("Replace {0} fragments with {1}\n".format(cnt, new_structure_file))
+
+	if cnt_total % len(args.add_structures) == 0:
+		obj_fred.add_connection(int(cnt_total / len(args.add_structures)))
+	else:
+		obj_fred.add_connection(1)
 
 	if args.flag_overwrite == False:
 		check_overwrite(args.output_file)

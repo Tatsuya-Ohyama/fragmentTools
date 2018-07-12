@@ -5,6 +5,11 @@ import sys
 import re
 from classes.FragmentData import FragmentData
 
+# =============== variables =============== #
+re_fragment = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
+re_connection = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
+
+
 # =============== classes =============== #
 class FredData:
 	""" fred ファイルのクラス """
@@ -17,12 +22,11 @@ class FredData:
 
 		self._load_file(input_file)
 
+
 	def _load_file(self, input_file):
 		""" fred データを読み込むメソッド """
 		with open(input_file, "r") as obj_input:
 			cnt_line = 0
-			re_fragment = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
-			re_connection = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
 			flag_read = 0
 			for line in obj_input:
 				cnt_line += 1
@@ -50,6 +54,7 @@ class FredData:
 				elif flag_read == 3:
 					self._others.append(line)
 
+
 	def add_fragment(self, obj_fragment):
 		""" フラグメントを追加するメソッド """
 		for idx, fragment in enumerate(self._fragments):
@@ -57,23 +62,34 @@ class FredData:
 			if len(fragment.get_atoms()) == 0:
 				self._fragments.pop(idx)
 
-		obj_fragment.update_fragment_index(self._fragments[-1].get_fragment_index() + 1)
-
 		self._atom += len(obj_fragment.get_atoms())
 		self._fragments.append(obj_fragment)
-		self._connection.append(["*", "*"])
+		return self
+
+
+	def add_connection(self, connection):
+		""" フラグメントの接続情報を増やすメソッド """
+		for i in range(connection):
+			self._connection.append(["*", "*"])
+		return self
+
 
 	def get_fragment_number(self):
 		""" フラグメント数を返すメソッド """
 		return len(self._fragments)
 
+
 	def get_last_fragment_index(self):
 		""" 最後のフラグメント番号を返すメソッド """
 		return self._fragments[-1].get_fragment_index()
 
+
 	def write_file(self, output_file):
 		""" ファイルに出力するメソッド """
 		re_NF = re.compile(r"NF=[\s\t]*-?\d+")
+		tmp_fragments = sorted([[obj_fragment.get_min_idx(), obj_fragment] for obj_fragment in self._fragments], key = lambda x : x[0])
+		self._fragments = [obj_fragment[1].update_fragment_index(idx + 1) for idx, obj_fragment in enumerate(tmp_fragments)]
+		self._connection
 
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
