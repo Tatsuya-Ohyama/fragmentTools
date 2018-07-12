@@ -2,33 +2,22 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import re
+import parmed
 
 # =============== classes =============== #
 class MoleculeInformation:
 	""" 分子構造のクラス """
 	def __init__(self, input_file):
-		self._residue_names = []
-		self._residue_idxs = []
-		self._atom_names = []
-		self._atom_idxs = []
-		self._coords = []
+		# member
+		self._obj_mol = None
+
+		# initiation
 		self._load_file(input_file)
+
 
 	def _load_file(self, input_file):
 		""" ファイルを読み込むメソッド """
-		re_atom = re.compile(r"^(?:(?:ATOM)|(?:HETATM))")
-		with open(input_file, "r") as obj_input:
-			atom_idx = 0
-			for line in obj_input:
-				if re_atom.search(line):
-					line = line.rstrip("\r\n")
-					atom_idx += 1
-					self._residue_names.append(line[17:20])
-					self._residue_idxs.append(int(line[22:26]))
-					self._atom_names.append(line[12:16])
-					self._atom_idxs.append(int(line[6:11]))
-					self._coords.append(line[30:54])
+		self._obj_mol = parmed.load_file(input_file)
 
 
 	def get_info(self, data_type = None, idx = None):
@@ -37,64 +26,72 @@ class MoleculeInformation:
 			# 残基名を返す
 			if idx is not None:
 				try:
-					return self._residue_names[idx]
+					return self._obj_mol.atoms[idx].residue.name
 				except IndexError:
 					sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_info.\n")
 					sys.exit(1)
 			else:
-				return self._residue_names
+				return [obj_atom.residue.name for obj_atom in self._obj_mol.atoms]
 
 		elif data_type == "residue_idx":
 			# 残基インデックスを返す
 			if idx is not None:
 				try:
-					return self._residue_idxs[idx]
+					return self._obj_mol.atoms[idx].residue.number
 				except IndexError:
 					sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_info.\n")
 					sys.exit(1)
 			else:
-				return self._residue_idxs
+				return [obj_atom.residue.number for obj_atom in self._obj_mol.atoms]
 
 		elif data_type == "atom_name":
 			if idx is not None:
 				try:
-					return self._atom_names[idx]
+					return self._obj_mol.atoms[idx].name
 				except IndexError:
 					sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_info.\n")
 					sys.exit(1)
 			else:
-				return self._atom_names
+				return [obj_atom.name for obj_atom in self._obj_mol.atoms]
 
 		elif data_type == "atom_idx":
 			if idx is not None:
 				try:
-					return self._atom_idxs[idx]
+					return self._obj_mol.atoms[idx].number
 				except IndexError:
 					sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_info.\n")
 					sys.exit(1)
 			else:
-				return self._atom_idxs
+				return [obj_atom.number for obj_atom in self._obj_mol.atoms]
+
 		else:
 			if idx is not None:
 				try:
-					return [[res_name, res_idx, atom_name, atom_idx] for res_name, res_idx, atom_name, atom_idx in zip(self._residue_names, self._residue_idxs, self._atom_names, self._atom_idxs)][idx]
+					return [[res_name, res_idx, atom_name, atom_idx] for res_name, res_idx, atom_name, atom_idx in zip(self.get_info("residue_name"), self.get_info("residue_idx"), self.get_info("atom_name"), self.get_info("atom_idx"))][idx]
 				except IndexError:
 					sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_info.\n")
 					sys.exit(1)
 			else:
-				return [[res_name, res_idx, atom_name, atom_idx] for res_name, res_idx, atom_name, atom_idx in zip(self._residue_names, self._residue_idxs, self._atom_names, self._atom_idxs)]
+				return [[res_name, res_idx, atom_name, atom_idx] for res_name, res_idx, atom_name, atom_idx in zip(self.get_info("residue_name"), self.get_info("residue_idx"), self.get_info("atom_name"), self.get_info("atom_idx"))]
+
+
+	def convert_number(self, mask):
+		""" マスクを原子順序番号に変換するメソッド """
+		mask = parmed.amber.AmberMask(self._obj_mol, mask)
+		return [self.get_info("atom_idx", idx) for idx in mask.Selected()]
 
 
 	def get_coord(self, idx = None):
 		""" 座標を出力するメソッド """
-		if idx is None:
-			return self._coords
-		else:
+		if idx is not None:
 			try:
-				return self._coords[idx]
+				return [[obj_atom.xx, obj_atom.xy, obj_atom.xz] for obj_atom in self._obj_mol.atoms[idx]]
 			except IndexError:
-				sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_coord\n")
-				sys.exit(1)
+					sys.stderr.write("ERROR: Invalid index in MoleculeInformation.get_info.\n")
+					sys.exit(1)
+		else:
+			return [[obj_atom.xx, obj_atom.xy, obj_atom.xz] for obj_atom in self._obj_mol.atoms]
+
 
 	def output_fragmentdata(self, obj_base_molecule, flag_multi):
 		""" 該当するフラグメントを出力するメソッド """
@@ -103,7 +100,7 @@ class MoleculeInformation:
 		if flag_multi:
 			# 同じ種類の残基の複数のフラグメントに適用する場合
 			mol_info = [list(x) for x in list(zip(self.get_info("residue_name"), self.get_info("atom_name")))]
-			len_atom = len(self._atom_names)
+			len_atom = len(self.get_info("atom_name"))
 			check_list = [False] * len_atom
 
 			for info in obj_base_molecule.get_info():
@@ -124,12 +121,12 @@ class MoleculeInformation:
 			# 単一のフラグメントに適用する場合、座標でマッチさせる
 			coords_base = obj_base_molecule.get_coord()
 
-			for array_idx, coords in enumerate(self._coords):
+			for array_idx, coords in enumerate(self.get_coords()):
 				# 自身の座標とそのインデックスで回す
 				if coords in coords_base:
 					# 座標でマッチした場合、マッチしたインデックスを取得する
 					match_idx = coords_base.index(coords)
-					if self._atom_names[array_idx] == obj_base_molecule.get_info("atom_name", match_idx):
+					if self.get_info("atom_name", array_idx) == obj_base_molecule.get_info("atom_name", match_idx):
 						# 原子名でもマッチを確認し、フラグメント情報に追加する
 						fragment_records[-1].append(obj_base_molecule.get_info("atom_idx", match_idx))
 					else:
