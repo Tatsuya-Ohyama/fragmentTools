@@ -92,7 +92,9 @@ class FredData:
 		re_NF = re.compile(r"NF=[\s\t]*-?\d+")
 		tmp_fragments = sorted([[obj_fragment.get_min_idx(), obj_fragment] for obj_fragment in self._fragments], key = lambda x : x[0])
 		self._fragments = [obj_fragment[1].update_fragment_index(idx + 1) for idx, obj_fragment in enumerate(tmp_fragments)]
-		self._connection = sorted(self._connection, key = lambda x : x[0])
+		tmp_connection_int = sorted([x for x in self._connection if isinstance(x[0], int)], key = lambda x : x[0])
+		tmp_connection_str = sorted([x for x in self._connection if isinstance(x[0], str)], key = lambda x : x[0])
+		self._connection = tmp_connection_int + tmp_connection_str
 
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
