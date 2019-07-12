@@ -39,22 +39,28 @@ class FragmentData:
 		if self.type != "TER":
 			self.type = check_residue(self.residue_name)
 
-			if self.residue_name in ["LYS", "ARG", "HIP", "SYM"]:
-				self.charge = 1
-			elif self.residue_name in ["ASP", "GLU"]:
-				self.charge = -1
-			elif re.search(r"(?:(?:[DR]A)|(?:[DR]G)|(?:DT)|(?:[DR]C)|(?:RU))5$", self.residue_name):
-				if self.flag_sep:
-					# 塩基と分けている場合
+			if self.type == "AminoAcid":
+				if self.residue_name in ["LYS", "ARG", "HIP", "SYM", "ACE"]:
 					self.charge = 1
-				else:
-					self.charge = 0
-			elif re.search(r"(?:(?:[DR]A)|(?:[DR]G)|(?:DT)|(?:[DR]C)|(?:RU))3?$", self.residue_name):
-				if self.flag_sep:
-					# 塩基と分けている場合
-					self.charge = 0
-				else:
+				elif self.residue_name in ["ASP", "GLU", "NME"]:
 					self.charge = -1
+				elif self.residue_name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
+					self.charge = 0
+
+			elif self.type == "NucleicAcid":
+				if re_5term.search(self.residue_name):
+					if self.flag_sep:
+						# 塩基と分けている場合
+						self.charge = 1
+					else:
+						self.charge = 0
+				elif re_3term.search(self.residue_name):
+					if self.flag_sep:
+						# 塩基と分けている場合
+						self.charge = 0
+					else:
+						self.charge = -1
+
 			elif self.residue_name in ["Na", "K"]:
 				self.charge = 1
 			elif self.residue_name in ["Zn", "Ca", "CAL", "ZIN"]:
@@ -68,14 +74,17 @@ class FragmentData:
 			# BDA のため、フラグメント間で原子を移動させる準備 (他フラグメントに与える原子)
 			if self.type == "AminoAcid":
 				# アミノ酸の切り方
+				delete_key = []
 				for key, value in self.atom_idxs.items():
 					if value in ["C", "O"]:
 						self.shift_atoms[key] = value
-						del(self.atom_idxs[key])
+						delete_key.append(key)
+						# del(self.atom_idxs[key])
 						if value == "C":
 							self.connectivity[1] = key
 					if value == "CA":
 						self.connectivity[0] = key
+				self.atom_idxs = {k: v for k, v in self.atom_idxs.items() if k not in delete_key}
 
 			elif self.type == "NucleicAcid":
 				# 核酸の切り方
@@ -85,9 +94,9 @@ class FragmentData:
 					for key, value in ref_atom_idx.items():
 						if not ("'" in value or "P" in value or re_termH1.match(value) or re_termH2.match(value)):
 							# 接続情報追加
-							if ("DC" in self.residue_name or "DT" in self.residue_name) and value == "N1":
+							if re_pyrimidine.match(self.residue_name) and value == "N1":
 								self.sep_connectivity[1] = key
-							elif ("DA" in self.residue_name or "DG" in self.residue_name) and value == "N9":
+							elif re_purine.match(self.residue_name) and value == "N9":
 								self.sep_connectivity[1] = key
 							# 原子の移動
 							self.sep_atoms[key] = value
@@ -119,9 +128,10 @@ class FragmentData:
 
 
 
+
 # =============== variables =============== #
 residue_types = {
-	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"],
+	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"],
 	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "DNA_base"],
 	"Water": ["SOL", "WAT", "HOH"],
 	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn", "CAL", "ZIN"]
@@ -131,6 +141,10 @@ re_head = re.compile(r"^([\d'\s])")
 re_ter = re.compile(r"^TER")
 re_termH1 = re.compile(r"H[53]T")
 re_termH2 = re.compile(r"HO[53]")
+re_pyrimidine = re.compile(r'^\s*[RD][UTC][53]?\s*$')
+re_purine = re.compile(r'^\s*[RD][GA][53]?\s*$')
+re_5term = re.compile(r'^[RD][AGCTU]5$')
+re_3term = re.compile(r'^[RD][AGCTU]3$')
 program_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
 template_files = [
 	os.path.join(program_dir, "template", "autofrag_3.templ"),

@@ -62,12 +62,11 @@ def check_charge(fragment_members, charges, pdb):
 				atom = re_digit.sub("", line[12:14].strip())
 				atom = re_quote_h.sub("", atom)
 				atom = re_quote_t.sub("", atom)
-				if atom == "HO":
+				if atom in ["HO", "HH"]:
 					atom = "H"
 				atom_types.append(atom)
 				if not atom in atom_charges:
-					sys.stderr.write("ERROR: Unknown atomtype (%s)\n" % atom)
-					sys.exit(1)
+					sys.stderr.write("ERROR: Unknown atomtype (%s). Skipped...\n" % atom)
 				# atom_chages.append(atom_charges[atom])
 
 	flag_error = 0
