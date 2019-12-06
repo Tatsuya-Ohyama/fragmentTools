@@ -468,7 +468,7 @@ if __name__ == '__main__':
 		# リロード
 
 		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input)
+		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input_path)
 
 		# 整形
 		output = []
