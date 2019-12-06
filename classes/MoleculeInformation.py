@@ -121,7 +121,7 @@ class MoleculeInformation:
 			# 単一のフラグメントに適用する場合、座標でマッチさせる
 			coords_base = obj_base_molecule.get_coord()
 
-			for array_idx, coords in enumerate(self.get_coords()):
+			for array_idx, coords in enumerate(self.get_coord()):
 				# 自身の座標とそのインデックスで回す
 				if coords in coords_base:
 					# 座標でマッチした場合、マッチしたインデックスを取得する
