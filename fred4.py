@@ -157,7 +157,7 @@ def load_ajf(file_input, file_reference):
 				elif "ReadGeom" in line:
 					if file_reference != None:
 						# 参照 PDB が指定されていた場合
-						check_file(file_reference)
+						basic_func.check_exist(file_reference, 2)
 					else:
 						# 参照 PDB が指定されていない場合
 						file_reference = re_wsp.sub("", line)
@@ -165,7 +165,7 @@ def load_ajf(file_input, file_reference):
 						file_reference = re_quote_h.sub("", file_reference)
 						file_reference = re_quote_t.sub("", file_reference)
 
-					check_file(file_reference)
+					basic_func.check_exist(file_reference, 2)
 
 					with open(file_reference, "r") as obj_pdb:
 						for p_line in obj_pdb:
@@ -428,7 +428,7 @@ if __name__ == '__main__':
 		# 編集ファイルに変換
 
 		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_ajf(args.input, args.pdb)
+		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_ajf(args.input_path, args.pdb)
 
 		# 整形
 		flag_fragment = 0
@@ -509,7 +509,7 @@ if __name__ == '__main__':
 
 		file_reference = ""
 		if args.pdb != None:
-			check_file(args.pdb)
+			basic_func.check_exist(args.pdb, 2)
 			file_reference = args.pdb
 		else:
 			for item in namelists:
