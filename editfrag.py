@@ -9,7 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-from basic_func import check_exist, check_overwrite
+from mods.func_prompt_io import check_exist, check_overwrite
 from classes.MoleculeInformation import MoleculeInformation
 from classes.FragmentData import FragmentData
 from classes.FredData import FredData

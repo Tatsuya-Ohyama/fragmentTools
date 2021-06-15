@@ -9,7 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-import basic_func
+from mods.func_prompt_io import *
 
 
 # =============== class =============== #
@@ -170,7 +170,7 @@ if __name__ == '__main__':
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
 
-	basic_func.check_exist(args.input, 2)
+	check_exist(args.input, 2)
 
 	template_file = ""
 	if args.version == "3":
@@ -181,7 +181,7 @@ if __name__ == '__main__':
 		template_file = template_files[2]
 	else:
 		template_file = args.version
-	basic_func.check_exist(template_file, 2)
+	check_exist(template_file, 2)
 
 	option_nuc = "+base"
 	if args.flag_sep:
@@ -316,7 +316,7 @@ if __name__ == '__main__':
 
 	# 出力
 	if args.flag_overwrite == False:
-		basic_func.check_overwrite(args.output)
+		check_overwrite(args.output)
 
 	cnt_fragment = 0
 	with open(args.output, "w") as obj_output:
