@@ -9,7 +9,7 @@ fred ファイルを元に、各フラグの PDB ファイルを生成するプ�
 import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-import basic_func
+from mods.func_prompt_io import *
 import argparse
 
 # =============== functions =============== #
@@ -23,8 +23,8 @@ if __name__ == '__main__':
 	parser.add_argument("-o", dest = "output", metavar = "OUTPUT", help = "Prefix for output")
 	args = parser.parse_args()
 
-	basic_func.check_exist(args.fred, 2)
-	basic_func.check_exist(args.pdb, 2)
+	check_exist(args.fred, 2)
+	check_exist(args.pdb, 2)
 
 	ref_atoms = []
 	get_atoms = []

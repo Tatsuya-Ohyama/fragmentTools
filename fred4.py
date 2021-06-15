@@ -9,7 +9,9 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-import basic_func
+from mods.func_prompt_io import *
+
+
 
 # =============== common variables =============== #
 # general
@@ -157,7 +159,7 @@ def load_ajf(file_input, file_reference):
 				elif "ReadGeom" in line:
 					if file_reference != None:
 						# 参照 PDB が指定されていた場合
-						basic_func.check_exist(file_reference, 2)
+						check_file(file_reference)
 					else:
 						# 参照 PDB が指定されていない場合
 						file_reference = re_wsp.sub("", line)
@@ -165,7 +167,7 @@ def load_ajf(file_input, file_reference):
 						file_reference = re_quote_h.sub("", file_reference)
 						file_reference = re_quote_t.sub("", file_reference)
 
-					basic_func.check_exist(file_reference, 2)
+					check_file(file_reference)
 
 					with open(file_reference, "r") as obj_pdb:
 						for p_line in obj_pdb:
@@ -422,13 +424,13 @@ if __name__ == '__main__':
 		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
 		sys.exit(1)
 
-	basic_func.check_exist(args.input_path, 2)
+	check_exist(args.input_path, 2)
 
 	if args.func == "edit":
 		# 編集ファイルに変換
 
 		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_ajf(args.input_path, args.pdb)
+		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_ajf(args.input, args.pdb)
 
 		# 整形
 		flag_fragment = 0
@@ -509,7 +511,7 @@ if __name__ == '__main__':
 
 		file_reference = ""
 		if args.pdb != None:
-			basic_func.check_exist(args.pdb, 2)
+			check_file(args.pdb)
 			file_reference = args.pdb
 		else:
 			for item in namelists:
@@ -519,7 +521,7 @@ if __name__ == '__main__':
 					file_reference = file_reference.replace("ReadGeom=", "")
 					file_reference = re_quote_h.sub("", file_reference)
 					file_reference = re_quote_t.sub("", file_reference)
-					basic_func.check_exist(file_reference, 2)
+					check_exist(file_reference, 2)
 					break
 
 		check_charge(fragment_members, charges, file_reference)
@@ -570,7 +572,7 @@ if __name__ == '__main__':
 
 		# 出力
 		if args.flag_overwrite == False:
-			basic_func.check_overwrite(args.output_path)
+			check_overwrite(args.output_path)
 		write_data(output, args.output_path)
 
 	elif args.func == "autofrag":
