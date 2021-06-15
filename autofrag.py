@@ -9,7 +9,7 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-from mods.func_prompt_io import *
+from classes.func_prompt_io import *
 
 
 # =============== class =============== #
