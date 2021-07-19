@@ -12,7 +12,7 @@ from mods.FragmentData import FragmentData
 RE_FRAGMENT = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
 RE_CONNECTION = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
 RE_NF = re.compile(r"NF=[\s\t]*-?\d+")
-
+INDENT = "  "
 
 
 # =============== classes =============== #
@@ -23,7 +23,7 @@ class FileFred:
 		self._charge = 0
 		self._fragments = []
 		self._connection = []
-		self._others = []
+		self._parameters = {}
 
 
 	@property
@@ -41,6 +41,10 @@ class FileFred:
 	@property
 	def n_fragment(self):
 		return len(self._fragments)
+
+	@property
+	def parameters(self):
+		return self._parameters
 
 
 	def set_n_atom(self, n_atom):
@@ -99,17 +103,17 @@ class FileFred:
 		return self
 
 
-	def set_other_info(self, other_info):
+	def set_parameters(self, parameters):
 		"""
 		Method to set other information
 
 		Args:
-			other_info (list): other information
+			parameters (list): other information
 
 		Returns:
 			self
 		"""
-		self._others = other_info
+		self._parameters = parameters
 		return self
 
 
@@ -125,10 +129,13 @@ class FileFred:
 		"""
 		with open(input_file, "r") as obj_input:
 			flag_read = 0
+			is_list_type = False
+			group_name = None
+			self._parameters = {"LIST_ORDER": []}
 			for line_idx, line_val in enumerate(obj_input, 1):
 				line_val = line_val.strip()
 
-				if line_idx == 2:
+				if line_idx == 1:
 					flag_read = 1
 
 				elif "connections" in line_val.lower():
@@ -137,9 +144,9 @@ class FileFred:
 				elif "< namelist >" in line_val.lower():
 					flag_read = 3
 
-				if flag_read == 1 and RE_FRAGMENT.search(line_val):
-					obj_fragment = FragmentData(line_val)
-					if fragment.charge != "ERR":
+				elif flag_read == 1 and RE_FRAGMENT.search(line_val):
+					obj_fragment = FragmentData().create_from_string(line_val)
+					if obj_fragment.charge != "ERR":
 						self._charge += obj_fragment.charge
 					self._fragments.append(obj_fragment)
 					self._n_atom += len(obj_fragment.atoms)
@@ -148,7 +155,38 @@ class FileFred:
 					self._connection.append([int(x) for x in line_val.strip().split()])
 
 				elif flag_read == 3:
-					self._others.append(line_val)
+					line_orig = line_val
+					line_val = line_val.strip()
+					if len(line_val.strip()) == 0:
+						continue
+
+					if line_val.startswith("&"):
+						# start of name list
+						group_name = line_val
+						self._parameters["LIST_ORDER"].append(group_name)
+
+						if group_name in ["&XYZ", "&FRAGMENT", "&FRAGPAIR"]:
+							is_list_type = True
+							self._parameters[group_name] = []
+						else:
+							is_list_type = False
+							self._parameters[group_name] = {}
+
+					elif line_val.startswith("/"):
+						# end of name list
+						group_name = None
+						is_list_type = False
+						continue
+
+					elif is_list_type:
+						# in name list of list type (order is important)
+						self._parameters[group_name].append(line_orig)
+
+					else:
+						# in namelist of non-list type (order is not important)
+						tmp_values = [v.strip() for v in line_val.split("=", maxsplit = 1)]
+						self._parameters[group_name][tmp_values[0]] = tmp_values[1]
+
 		return self
 
 
@@ -191,12 +229,13 @@ class FileFred:
 		return self
 
 
-	def write(self, output_file):
+	def write(self, output_file, indent=INDENT):
 		"""
 		Method to write out file
 
 		Args:
 			output_file (str): output file
+			indent (int, optional): indent length
 
 		Returns:
 			self
@@ -220,10 +259,24 @@ class FileFred:
 			obj_output.write("\n")
 
 			obj_output.write("===============< namelist >===============\n")
-			for line_val in self._others:
-				redb_NF = RE_NF.search(line_val)
-				if redb_NF:
-					line_val = line_val[: redb_NF.start()] + "NF={0}".format(len(self._fragments)) + line_val[redb_NF.end() :]
-				obj_output.write(line_val)
+
+			if "&FMOCNTRL" in self._parameters["LIST_ORDER"] and \
+				"NF" in self._parameters.keys():
+				self._parameters["&FMOCNTRL"]["NF"] = len(self._fragments)
+
+			for group_name in self._parameters["LIST_ORDER"]:
+				obj_output.write("{0}\n".format(group_name))
+				if isinstance(self._parameters[group_name], dict):
+					for parameter_name, parameter_value in self._parameters[group_name].items():
+						obj_output.write("{0}{1}={2}\n".format(
+							INDENT,
+							parameter_name,
+							parameter_value
+						))
+				else:
+					for line_val in self._parameters[group_name]:
+						obj_output.write(line_val + "\n")
+				obj_output.write("/\n\n")
+
 
 		return self

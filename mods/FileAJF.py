@@ -44,12 +44,9 @@ def split_n(line, length):
 # =============== class =============== #
 class FileAJF:
 	""" .ajf file class """
-	def __init__(self, ajf_file):
+	def __init__(self):
 		# member
 		self._parameters = {}
-
-		# init
-		self.read(ajf_file)
 
 
 	@property
@@ -298,12 +295,13 @@ class FileAJF:
 		return parameters
 
 
-	def write(self, output_file):
+	def write(self, output_file, indent=INDENT):
 		"""
 		Method to write .ajf file
 
 		Args:
 			output_file (str): .ajf file
+			indent (int, optional): indent length
 
 		Returns:
 			self
