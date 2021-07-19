@@ -3,6 +3,7 @@
 
 import sys
 import re
+import copy
 
 from mods.FragmentData import FragmentData
 
@@ -11,7 +12,6 @@ from mods.FragmentData import FragmentData
 # =============== variables =============== #
 RE_FRAGMENT = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
 RE_CONNECTION = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
-RE_NF = re.compile(r"NF=[\s\t]*-?\d+")
 INDENT = "  "
 
 
@@ -45,6 +45,56 @@ class FileFred:
 	@property
 	def parameters(self):
 		return self._parameters
+
+	@property
+	def complete_parameters(self):
+		parameters = copy.deepcopy(self._parameters)
+		if "&CNTRL" in parameters["LIST_ORDER"] and \
+			"Natom" in parameters.keys():
+			parameters["&CNTRL"]["Natom"] = sum([len(v.atoms) for v in self._fragments])
+
+		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
+			"NF" in parameters.keys():
+			parameters["&FMOCNTRL"]["NF"] = len(self._fragments)
+
+		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
+			"Charge" in parameters.keys():
+			parameters["&CNTRL"]["Charge"] = sum([v.charge for v in self._fragments])
+
+		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
+			"AutoFrag" in parameters.keys():
+			parameters["&FMOCNTRL"]["AutoFrag"] = "'OFF'"
+
+		parameters["&FRAGMENT"] = ""
+		parameters["&FRAGMENT"] += "\n".join([
+			"".join(
+				["{0:>8}".format(len(obj_fragment.atoms)) for obj_fragment in self._fragments[i:i+10]]
+			) for i in range(0, len(self._fragments), 10)
+		]) + "\n"
+		parameters["&FRAGMENT"] += "\n".join([
+			"".join(
+				["{0:>8}".format(obj_fragment.charge) for obj_fragment in self._fragments[i:i+10]]
+			) for i in range(0, len(self._fragments), 10)
+		]) + "\n"
+		parameters["&FRAGMENT"] += "\n".join([
+			"".join(
+				["{0:>8}".format(obj_fragment.bda) for obj_fragment in self._fragments[i:i+10]]
+			) for i in range(0, len(self._fragments), 10)
+		]) + "\n"
+		parameters["&FRAGMENT"] += "\n".join([
+			"\n".join([
+				"".join([
+					"{0:>8}".format(atom_idx) for atom_idx in obj_fragment.atoms[atom_i:atom_i+10]
+				]) for atom_i in range(0, len(obj_fragment.atoms), 10)
+			]) for obj_fragment in self._fragments
+		]) + "\n"
+		parameters["&FRAGMENT"] += "\n".join([
+			"".join(
+				["{0:>8}".format(i) for i in connect]
+			) for connect in self._connection
+		]) + "\n"
+
+		return parameters
 
 
 	def set_n_atom(self, n_atom):

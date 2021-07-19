@@ -21,25 +21,11 @@ from mods.FragmentData import FragmentData
 
 # =============== common variables =============== #
 # general
-RE_WSP = re.compile(r"[\s\t]+")
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
-RE_EMPTY = re.compile(r"^[\s\t]*$")
-RE_NAMELIST_H = re.compile(r"^[\s\t]*\&")
-RE_NAMELIST_T = re.compile(r"^[\s\t]*/$")
 RE_DIGIT = re.compile(r"[\d\s]+")
 
-RE_NATOM = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
-RE_NF = re.compile(r"NF", re.IGNORECASE)
-RE_CHARGE = re.compile(r"^[\s\t]*Charge", re.IGNORECASE)
-RE_AUTOFRAG = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
-RE_FRAGMENT = re.compile(r"\&FRAGMENT", re.IGNORECASE)
-RE_COORD = re.compile(r"\{\.{3}\}")
-
-RE_NAMELIST_FRAGMENT_H = re.compile(r"^[\s\t]*\&FRAGMENT")
-RE_NAMELIST_FRAGMENT_T = re.compile(r"^[\s\t]*\/")
-
-ATOM_CHARGES = {
+ATOM_ELECTRON = {
 	"H": 1, "Li": 3, "Be": 4, "B": 5,
 	"C": 6, "N": 7, "O": 8, "F": 9,
 	"Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15,
@@ -49,91 +35,59 @@ ATOM_CHARGES = {
 }
 
 
+
 # =============== functions =============== #
-def check_electrons(fragment_members, charges, pdb):
+def check_electrons(list_obj_fragments, pdb_file):
 	"""
 	Function to check system charge
 
 	Args:
 		fragment_members (list): fragment information
-		charges (list): fragment charge
-		pdb (str): .pdb file
+		pdb_file (str): .pdb file
 	"""
-	atom_orders = []
-	atom_types = []
+	element_table = {}
 
-	with open(pdb, "r") as obj_pdb:
-		for line_val in obj_pdb:
+	# get atom_index and element
+	with open(pdb_file, "r") as obj_input:
+		for line_val in obj_input:
 			if line_val.startswith("ATOM") or line_val.startswith("HETATM"):
-				atom_orders.append(line_val[6:11].strip())
-				atom = RE_DIGIT.sub("", line_val[12:14].strip())
-				atom = RE_QUOTE_H.sub("", atom)
-				atom = RE_QUOTE_T.sub("", atom)
-				if atom in ["HO", "HH"]:
-					atom = "H"
-				atom_types.append(atom)
-				if not atom in ATOM_CHARGES:
-					sys.stderr.write("ERROR: Unknown atomtype (%s). Skipped...\n" % atom)
+				atom_idx = int(line_val[6:11].strip())
+				element = RE_DIGIT.sub("", line_val[12:14].strip())
+				element = RE_QUOTE_H.sub("", element)
+				element = RE_QUOTE_T.sub("", element)
+				if element in ["HO", "HH"]:
+					element = "H"
 
-	flag_error = 0
-	for i in range(len(fragment_members)):
-		charge = 0
-		electron_info = []
-		for j in range(len(fragment_members[i])):
+				element_table[atom_idx] = element
+				if not element in ATOM_ELECTRON:
+					sys.stderr.write("ERROR: Unknown atomtype ({0}). Skipped...\n".format(element))
+
+	flag_error = False
+	for fragment_idx, obj_fragment in enumerate(list_obj_fragments, 1):
+		electron_fragment = 0
+		for atom_i in obj_fragment.atoms:
 			try:
-				charge += ATOM_CHARGES[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
-				electron_info.append("{0:>5} {1} = {2}\n".format(fragment_members[i][j], atom_types[atom_orders.index(str(fragment_members[i][j]))], ATOM_CHARGES[atom_types[atom_orders.index(str(fragment_members[i][j]))]]))
+				electron_atom = ATOM_ELECTRON[element_table[atom_i]]
+				electron_fragment += electron_atom
 			except ValueError:
-				sys.stderr.write("ERROR: %d is not in list. Check the atom order in fred and pdb file.\n" % fragment_members[i][j])
+				sys.stderr.write("ERROR: atom index `{0}` is not found in list.\n".format(atom_i))
 				sys.exit(1)
-		charge += charges[i]
-		if charge % 2 != 0:
-			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n       The number of electrons in fragment No. %d is %d.\n" % (i + 1, charge))
-			for error_line in electron_info:
-				sys.stderr.write("       " + error_line)
-			sys.stderr.write("\n")
-			flag_error = 1
 
-	if flag_error == 1:
-		sys.stderr.write("ERROR: The number of electrons for some fragments were not even number.\n       Prceeding? (y/N): ")
+		electron_fragment += (-1 * obj_fragment.charge)
+		if electron_fragment % 2 != 0:
+			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n")
+			sys.stderr.write("       The number of electrons in fragment No. {0} is {1}.\n".format(fragment_idx, electron_fragment))
+			flag_error = True
+
+	if flag_error:
+		sys.stderr.write("ERROR: The number of electrons for some fragments were not even number.\n")
+		sys.stderr.write("       Prceeding? (y/N): ")
 		sys.stderr.flush()
-		user = sys.stdin.readline().rstrip("\r\n")
+		user = sys.stdin.readline().strip()
 		if user.lower() != "y":
 			sys.exit(0)
 	else:
 		sys.stderr.write("INFO: check_electrons is ok.\n")
-
-
-def convert_ajf(fragment_info, width, n):
-	"""
-	Function to convert fragment information to .ajf file
-
-	Args:
-		fragment_info (list): fragment information
-		width (int): width
-		n (int): number of elements
-
-	Returns:
-		list
-	"""
-	fragment_info = list(map(lambda data : str(data), fragment_info))
-	new_fragment_info = [""]
-
-	format_data = "{" + str(width) + "}"
-
-	index = 0
-	for i in range(len(fragment_info)):
-		new_fragment_info[index] += format_data.format(fragment_info[i])
-		if i != 0 and (i + 1) % n == 0:
-			index += 1
-			new_fragment_info.append("")
-
-	if len(new_fragment_info[len(new_fragment_info) - 1]) == 0:
-		# 指定された個数でちょうど終わる場合は、無駄な要素が追加されるので削除する
-		del(new_fragment_info[len(new_fragment_info) - 1])
-
-	return new_fragment_info
-
 
 
 
@@ -147,22 +101,22 @@ if __name__ == '__main__':
 
 		parser_edit = subparser.add_parser("edit", help="Convert ajf to fred (ajf -> fred)")
 		parser_edit.set_defaults(func="edit")
-		parser_edit.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="ajf file")
-		parser_edit.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="output file")
-		parser_edit.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="PDB", help="reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_edit.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.ajf", required=True, help="ajf file")
+		parser_edit.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", help="fred file")
+		parser_edit.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="REF.pdb", help="reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_edit.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_rewrite = subparser.add_parser("rewrite", help="Rewrite fred fred -> fred")
 		parser_rewrite.set_defaults(func="rewrite")
-		parser_rewrite.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="fred")
-		parser_rewrite.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
+		parser_rewrite.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
+		parser_rewrite.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", help="fred file")
 		parser_rewrite.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_output = subparser.add_parser("output", help="Convert fred to ajf (fred -> ajf)")
 		parser_output.set_defaults(func="output")
-		parser_output.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="fred")
-		parser_output.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
-		parser_output.add_argument("-p", "--pdb", metavar="PDB", help="Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_output.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
+		parser_output.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.ajf", help="ajf file")
+		parser_output.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="REF.pdb", help="Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_output.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_autofrag = subparser.add_parser("autofrag", help="Auto fragmentation for PDB (pdb -> fred)")
@@ -204,7 +158,7 @@ if __name__ == '__main__':
 		obj_fred.set_charge(sum([v.charge for v in list_fragments]))
 		obj_fred.set_fragments(list_fragments)
 		obj_fred.set_connections(list_connections)
-		obj_fred.set_other_info(obj_ajf.parameter_list(True))
+		obj_fred.set_parameters(obj_ajf.parameters)
 
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)
@@ -229,40 +183,16 @@ if __name__ == '__main__':
 		obj_fred.read(args.INPUT_FILE)
 
 		obj_ajf = FileAJF()
-		obj_ajf.set_parameters()
+		obj_ajf.set_parameters(obj_fred.complete_parameters)
+
+		file_reference = obj_fred.parameters["&CNTRL"]["ReadGeom"]
+		if args.PDB_FILE is not None:
+			file_reference = args.PDB_FILE
+		check_electrons(obj_fred.fragments, file_reference)
 
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)
 		obj_ajf.write(args.OUTPUT_FILE)
-
-		check_electrons(fragment_members, charges, file_reference)
-
-		# # 整形
-		# output = []
-		# flag_fragment = 0
-		# for line_val in namelists:
-		# 	if RE_NATOM.search(line_val):
-		# 		# 原子数の更新
-		# 		atom = sum(fragment_atoms)
-		# 		line_val = re.sub(r"\d+", str(atom), line_val)
-		# 	elif RE_NF.search(line_val):
-		# 		# フラグメント数の更新
-		# 		fragment = len(fragment_members)
-		# 		line_val = re.sub(r"\d+", str(fragment), line_val)
-		# 	elif RE_CHARGE.search(line_val):
-		# 		# 電荷の更新
-		# 		charge = sum(charges)
-		# 		line_val = re.sub(r"-?\d+", str(charge), line_val)
-		# 	elif RE_AUTOFRAG.search(line_val):
-		# 		# autofrag の更新
-		# 		line_val = re.sub(r"=.+$", "='OFF'", line_val)
-		# 	elif RE_FRAGMENT.search(line_val):
-		# 		# フラグメント情報書き出し場所を検索
-		# 		flag_fragment = 1
-		# 	elif flag_fragment == 1 and RE_COORD.search(line_val):
-		# 		# フラグメント情報の書き出し
-		# 		continue
-		# 	output.append(line_val)
 
 
 	elif args.func == "autofrag":
