@@ -5,35 +5,58 @@
 fred4 - fragment editor for mizuho ABINIT-MP
 """
 
-import sys, os, re, signal
+import sys, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-from classes.func_prompt_io import *
+import os
+import re
+from mods.func_prompt_io import *
+
 
 
 # =============== common variables =============== #
 # general
-re_wsp = re.compile(r"[\s\t]+")
-re_quote_h = re.compile(r"^['\"]")
-re_quote_t = re.compile(r"['\"]$")
-re_empty = re.compile(r"^[\s\t]*$")
-re_namelist_h = re.compile(r"^[\s\t]*\&")
-re_namelist_t = re.compile(r"^[\s\t]*/$")
-re_pdb_atom = re.compile(r"^((HETATM)|(ATOM))")
+RE_WSP = re.compile(r"[\s\t]+")
+RE_QUOTE_H = re.compile(r"^['\"]")
+RE_QUOTE_T = re.compile(r"['\"]$")
+RE_EMPTY = re.compile(r"^[\s\t]*$")
+RE_NAMELIST_H = re.compile(r"^[\s\t]*\&")
+RE_NAMELIST_T = re.compile(r"^[\s\t]*/$")
+RE_DIGIT = re.compile(r"[\d\s]+")
+
 
 # ネームリスト更新
-re_natom = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
-re_nf = re.compile(r"NF", re.IGNORECASE)
-re_charge = re.compile(r"^[\s\t]*Charge", re.IGNORECASE)
-re_autofrag = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
-re_fragment = re.compile(r"\&FRAGMENT", re.IGNORECASE)
-re_coord = re.compile(r"\{\.{3}\}")
+RE_NATOM = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
+RE_NF = re.compile(r"NF", re.IGNORECASE)
+RE_CHARGE = re.compile(r"^[\s\t]*Charge", re.IGNORECASE)
+RE_AUTOFRAG = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
+RE_FRAGMENT = re.compile(r"\&FRAGMENT", re.IGNORECASE)
+RE_COORD = re.compile(r"\{\.{3}\}")
+
+ATOM_CHARGES = {
+	"H": 1, "Li": 3, "Be": 4, "B": 5,
+	"C": 6, "N": 7, "O": 8, "F": 9,
+	"Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15,
+	"S": 16, "Cl": 17, "K": 19, "Ca": 20,
+	"Fe": 26, "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30,
+	"Br": 35
+}
 
 
 # =============== functions =============== #
 # split_n
 def split_n(line, length):
+	"""
+	Function to split by n-chars
+
+	Args:
+		line (str): target string
+		length (int): split length
+
+	Returns:
+		list
+	"""
 	line = line.rstrip("\r\n")
 	datas = []
 	pos = 0
@@ -51,24 +74,21 @@ def split_n(line, length):
 
 # check_charge
 def check_charge(fragment_members, charges, pdb):
-	atom_charges = {"H": 1, "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8, "F": 9, "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15, "S": 16, "Cl": 17, "K": 19, "Ca": 20, "Fe": 26, "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30, "Br": 35}
 	atom_orders = []
 	atom_types = []
-	re_digit = re.compile(r"[\d\s]+")
 
 	with open(pdb, "r") as obj_pdb:
-		for line in obj_pdb:
-			if re_pdb_atom.search(line):
-				atom_orders.append(line[6:11].strip())
-				atom = re_digit.sub("", line[12:14].strip())
-				atom = re_quote_h.sub("", atom)
-				atom = re_quote_t.sub("", atom)
+		for line_val in obj_pdb:
+			if line_val.startswith("ATOM") or line_val.startswith("HETATM"):
+				atom_orders.append(line_val[6:11].strip())
+				atom = RE_DIGIT.sub("", line_val[12:14].strip())
+				atom = RE_QUOTE_H.sub("", atom)
+				atom = RE_QUOTE_T.sub("", atom)
 				if atom in ["HO", "HH"]:
 					atom = "H"
 				atom_types.append(atom)
-				if not atom in atom_charges:
+				if not atom in ATOM_CHARGES:
 					sys.stderr.write("ERROR: Unknown atomtype (%s). Skipped...\n" % atom)
-				# atom_chages.append(atom_charges[atom])
 
 	flag_error = 0
 	for i in range(len(fragment_members)):
@@ -76,8 +96,8 @@ def check_charge(fragment_members, charges, pdb):
 		electron_info = []
 		for j in range(len(fragment_members[i])):
 			try:
-				charge += atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
-				electron_info.append("{0:>5} {1} = {2}\n".format(fragment_members[i][j], atom_types[atom_orders.index(str(fragment_members[i][j]))], atom_charges[atom_types[atom_orders.index(str(fragment_members[i][j]))]]))
+				charge += ATOM_CHARGES[atom_types[atom_orders.index(str(fragment_members[i][j]))]]
+				electron_info.append("{0:>5} {1} = {2}\n".format(fragment_members[i][j], atom_types[atom_orders.index(str(fragment_members[i][j]))], ATOM_CHARGES[atom_types[atom_orders.index(str(fragment_members[i][j]))]]))
 			except ValueError:
 				sys.stderr.write("ERROR: %d is not in list. Check the atom order in fred and pdb file.\n" % fragment_members[i][j])
 				sys.exit(1)
@@ -93,7 +113,7 @@ def check_charge(fragment_members, charges, pdb):
 		sys.stderr.write("ERROR: The number of electrons for some fragments were not even number.\n       Prceeding? (y/N): ")
 		sys.stderr.flush()
 		user = sys.stdin.readline().rstrip("\r\n")
-		if not (user == "Y" or user == "y"):
+		if user.lower() != "y":
 			sys.exit(0)
 	else:
 		sys.stderr.write("INFO: check_charge is ok.\n")
@@ -139,65 +159,62 @@ def load_ajf(file_input, file_reference):
 	connections = []
 
 	with open(file_input, "r") as obj_input:
-		line_count = 0
-		for line in obj_input:
-			line_count += 1
-
+		for line_idx, line_val in enumerate(obj_input, 1):
 			if flag_read == 0:
 				# ネームリスト取得
-				line = line.strip()
+				line_val = line_val.strip()
 
-				if re_empty.search(line):
+				if len(line_val.strip()) == 0:
 					# 空行はスキップ
 					continue
 
-				if re_namelist_fragment_h.search(line):
+				if re_namelist_fragment_h.search(line_val):
 					# FRAGMENT ネームリストの始端
 					flag_read = 1
 
-				elif "ReadGeom" in line:
+				elif "ReadGeom" in line_val:
 					if file_reference != None:
 						# 参照 PDB が指定されていた場合
 						check_file(file_reference)
 					else:
 						# 参照 PDB が指定されていない場合
-						file_reference = re_wsp.sub("", line)
+						file_reference = RE_WSP.sub("", line_val)
 						file_reference = file_reference.replace("ReadGeom=", "")
-						file_reference = re_quote_h.sub("", file_reference)
-						file_reference = re_quote_t.sub("", file_reference)
+						file_reference = RE_QUOTE_H.sub("", file_reference)
+						file_reference = RE_QUOTE_T.sub("", file_reference)
 
 					check_file(file_reference)
 
 					with open(file_reference, "r") as obj_pdb:
 						for p_line in obj_pdb:
-							if re_pdb_atom.search(p_line):
+							if p_line.startswith("ATOM") or pline.startswith("HETATM"):
 								atom += 1
 
-				if re_namelist_fragment_t.search(line):
-					line = "/\n"
-				elif not re_namelist_h.search(line):
-					line = "  " + line
-				namelists.append(line)
+				if re_namelist_fragment_t.search(line_val):
+					line_val = "/\n"
+				elif not RE_NAMELIST_H.search(line_val):
+					line_val = "  " + line_val
+				namelists.append(line_val)
 
 			elif 0 < flag_read:
 				# フラグメント情報取得
-				line = line.rstrip("\r\n")
+				line_val = line_val.rstrip("\r\n")
 
-				if re_namelist_fragment_t.search(line):
+				if re_namelist_fragment_t.search(line_val):
 					# FRAGMENT ネームリストの終端
-					line = "{...}\n/\n"
+					line_val = "{...}\n/\n"
 					flag_read = 0
-					namelists.append(line)
+					namelists.append(line_val)
 
 				else:
 					# 8 文字ずつ区切る
-					datas = list(map(lambda data : int(data), split_n(line, 8)))
+					datas = list(map(lambda data : int(data), split_n(line_val, 8)))
 
 					if flag_read == 1:
 						# フラグメント構成原子取得
 						if "0" in datas:
 							# 構成原子 0 のフラグメントがある場合
-							sys.stderr.write("ERROR: Invalid ajf file in %d\n" % line_count)
+							sys.stderr.write("ERROR: Invalid ajf file in {0}\n".format(line_idx))
 							sys.stderr.write("       zero atoms in fragment found\n")
 							sys.exit(1)
 
@@ -263,8 +280,8 @@ def load_ajf(file_input, file_reference):
 
 					elif flag_read == 5:
 						# 接続情報取得
-						line = line.strip()
-						connections.append(list(map(lambda data : int(data),re_wsp.split(line))))
+						line_val = line_val.strip()
+						connections.append(list(map(lambda data : int(data),RE_WSP.split(line_val))))
 	return fragment_atoms, charges, BDAs, fragment_members, connections, namelists
 
 
@@ -284,29 +301,26 @@ def load_fred(file_input):
 
 	re_connection = re.compile(r"<< connections", re.IGNORECASE)
 	re_namelist_mark = re.compile(r"=+< namelist >=+")
-	re_natom = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
-	re_nf = re.compile(r"NF", re.IGNORECASE)
-	re_charge = re.compile(r"^[\s\t]*Charge", re.IGNORECASE)
-	re_autofrag = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
-	re_fragment = re.compile(r"\&FRAGMENT", re.IGNORECASE)
-	re_coord = re.compile(r"\{\.{3}\}")
+	RE_NATOM = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
+	RE_NF = re.compile(r"NF", re.IGNORECASE)
+	RE_CHARGE = re.compile(r"^[\s\t]*Charge", re.IGNORECASE)
+	RE_AUTOFRAG = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
+	RE_FRAGMENT = re.compile(r"\&FRAGMENT", re.IGNORECASE)
+	RE_COORD = re.compile(r"\{\.{3}\}")
 
 	with open(file_input, "r") as obj_input:
-		line_count = 0
+		for line_idx, line_val in enumerate(obj_input, 1):
+			line_val = line_val.strip()
 
-		for line in obj_input:
-			line_count += 1
-			line = line.strip()
-
-			if line_count == 1 or re_empty.search(line):
+			if line_idx == 1 or RE_EMPTY.search(line_val):
 				# 1行目と空行は無視
 				continue
 
-			elif re_connection.search(line):
+			elif re_connection.search(line_val):
 				# 接続情報フラグ
 				flag_read = 1
 
-			elif re_namelist_mark.search(line):
+			elif re_namelist_mark.search(line_val):
 				# この行以降がネームリスト
 				flag_read = 2
 
@@ -323,45 +337,45 @@ def load_fred(file_input):
 
 			elif flag_read == 0:
 				# フラグメント情報
-				datas = line.split("|")
+				datas = line_val.split("|")
 				datas = list(map(lambda data : data.strip(), datas))
 				for item in datas:
 					if item == "":
-						sys.stderr.write("ERROR: Invalid format in line {0}.\n".format(line_count))
+						sys.stderr.write("ERROR: Invalid format in line {0}.\n".format(line_idx))
 						sys.exit(1)
 
 				charges.append(int(datas[1]))
 				BDAs.append(int(datas[2]))
-				tmp = list(map(lambda data : int(data), re_wsp.split(datas[3])))
+				tmp = list(map(lambda data : int(data), RE_WSP.split(datas[3])))
 				fragment_members.append(tmp)
 				atom += len(tmp)
 
 			elif flag_read == 1:
 				# 接続情報
-				tmp = list(map(lambda data : int(data), re_wsp.split(line)))
+				tmp = list(map(lambda data : int(data), RE_WSP.split(line_val)))
 				connections.append(tmp)
 
 			elif flag_read == 2:
 				# ネームリスト
-				if re_natom.search(line):
+				if RE_NATOM.search(line_val):
 					# 原子数の更新
-					line = re.sub(r"\d+", str(atom), line)
-				elif re_nf.search(line):
+					line_val = re.sub(r"\d+", str(atom), line_val)
+				elif RE_NF.search(line_val):
 					# フラグメント数の更新
-					line = re.sub(r"\d+", str(fragment), line)
-				elif re_charge.search(line):
+					line = re.sub(r"\d+", str(fragment), line_val)
+				elif RE_CHARGE.search(line):
 					# 電荷の更新
-					line = re.sub(r"-?\d+", str(charge), line)
-				elif re_autofrag.search(line):
+					line_val = re.sub(r"-?\d+", str(charge), line_val)
+				elif RE_AUTOFRAG.search(line_val):
 					# autofrag の更新
-					line = re.sub(r"=.+$", "='OFF'", line)
+					line_val = re.sub(r"=.+$", "='OFF'", line_val)
 
-				if re_namelist_t.search(line):
+				if RE_NAMELIST_T.search(line_val):
 					line = "/\n"
-				elif not re_namelist_h.search(line):
-					line = "  " + line
+				elif not RE_NAMELIST_H.search(line_val):
+					line_val = "  " + line_val
 
-				namelists.append(line)
+				namelists.append(line_val)
 	return fragment_atoms, charges, BDAs, fragment_members, connections, namelists
 
 
@@ -369,61 +383,62 @@ def load_fred(file_input):
 # write_data (データの書き出し; ファイルが指定されていた場合はファイルに書き出し)
 def write_data(contents, output):
 	with open(output, "w") as obj_output:
-		for line in contents:
-			obj_output.write("%s\n" % line)
+		for line_val in contents:
+			obj_output.write("{0}\n".format(line_val))
+
 
 
 # =============== main =============== #
 if __name__ == '__main__':
 	try:
-		parser = argparse.ArgumentParser(description = "Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
+		parser = argparse.ArgumentParser(description="Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
 
-		subparser = parser.add_subparsers(help = "Sub-command")
+		subparser = parser.add_subparsers(help="Sub-command")
 		subparser.required = True
 
-		parser_edit = subparser.add_parser("edit", help = "Convert ajf to fred (ajf -> fred)")
-		parser_edit.set_defaults(func = "edit")
-		parser_edit.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "ajf file")
-		parser_edit.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "output file")
-		parser_edit.add_argument("-p", "--pdb", metavar = "PDB", help = "reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
-		parser_edit.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
+		parser_edit = subparser.add_parser("edit", help="Convert ajf to fred (ajf -> fred)")
+		parser_edit.set_defaults(func="edit")
+		parser_edit.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="ajf file")
+		parser_edit.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="output file")
+		parser_edit.add_argument("-p", "--pdb", metavar="PDB", help="reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_edit.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
-		parser_rewrite = subparser.add_parser("rewrite", help = "Rewrite fred fred -> fred")
-		parser_rewrite.set_defaults(func = "rewrite")
-		parser_rewrite.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "fred")
-		parser_rewrite.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
-		parser_rewrite.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
+		parser_rewrite = subparser.add_parser("rewrite", help="Rewrite fred fred -> fred")
+		parser_rewrite.set_defaults(func="rewrite")
+		parser_rewrite.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="fred")
+		parser_rewrite.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
+		parser_rewrite.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
-		parser_output = subparser.add_parser("output", help = "Convert fred to ajf (fred -> ajf)")
-		parser_output.set_defaults(func = "output")
-		parser_output.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "fred")
-		parser_output.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
-		parser_output.add_argument("-p", "--pdb", metavar = "PDB", help = "Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
-		parser_output.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
+		parser_output = subparser.add_parser("output", help="Convert fred to ajf (fred -> ajf)")
+		parser_output.set_defaults(func="output")
+		parser_output.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="fred")
+		parser_output.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
+		parser_output.add_argument("-p", "--pdb", metavar="PDB", help="Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_output.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
-		parser_autofrag = subparser.add_parser("autofrag", help = "Auto fragmentation for PDB (pdb -> fred)")
-		parser_autofrag.set_defaults(func = "autofrag")
-		parser_autofrag.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "PDB")
-		parser_autofrag.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
-		parser_autofrag.add_argument("-s", "--separate", action = "store_true", help = "Nucleotide is separates to base and sugar+phosphate")
-		parser_autofrag.add_argument("-v", "--version", choices = ["3", "5", "m"], help = "ajf version: 3 = abinit-mp3, 5 = abinitmp5, m = mizuho")
-		parser_autofrag.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
+		parser_autofrag = subparser.add_parser("autofrag", help="Auto fragmentation for PDB (pdb -> fred)")
+		parser_autofrag.set_defaults(func="autofrag")
+		parser_autofrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="PDB")
+		parser_autofrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
+		parser_autofrag.add_argument("-s", "--separate", action="store_true", help="Nucleotide is separates to base and sugar+phosphate")
+		parser_autofrag.add_argument("-v", "--version", choices=["3", "5", "m"], help="ajf version: 3 = abinit-mp3, 5 = abinitmp5, m = mizuho")
+		parser_autofrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
-		parser_editfrag = subparser.add_parser("editfrag", help = "Create new fred in which fragments were devided based on PDB and fred (pdb + fred -> fred)")
-		parser_editfrag.set_defaults(func = "editfrag")
-		parser_editfrag.add_argument("-i", dest = "input_path", metavar = "INPUT", required = True, help = "PDB")
-		parser_editfrag.add_argument("-o", dest = "output_path", metavar = "OUTPUT", help = "Output (Default: STDOUT)")
-		parser_editfrag.add_argument("-f", metavar = "fred", dest = "fred", required = True, help = "fred")
-		parser_editfrag.add_argument("-b", metavar = "pdb", dest = "pdb", required = True, help = "pdb")
-		parser_editfrag.add_argument("-n", metavar = "pdb", dest = "pdb", required = True, nargs = "+", help = "pdb for each fragments")
-		parser_editfrag.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite_forcibly")
+		parser_editfrag = subparser.add_parser("editfrag", help="Create new fred in which fragments were devided based on PDB and fred (pdb + fred -> fred)")
+		parser_editfrag.set_defaults(func="editfrag")
+		parser_editfrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="PDB")
+		parser_editfrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
+		parser_editfrag.add_argument("-f", metavar="fred", dest="fred", required=True, help="fred")
+		parser_editfrag.add_argument("-b", metavar="pdb", dest="pdb", required=True, help="pdb")
+		parser_editfrag.add_argument("-n", metavar="pdb", dest="pdb", required=True, nargs="+", help="pdb for each fragments")
+		parser_editfrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		args = parser.parse_args()
 	except TypeError:
 		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
 		sys.exit(1)
 
-	check_exist(args.input_path, 2)
+	check_exist(args.INPUT_FILE, 2)
 
 	if args.func == "edit":
 		# 編集ファイルに変換
@@ -436,40 +451,40 @@ if __name__ == '__main__':
 		output = []
 		output.append("  FNo.  | charge | BDA | atoms of fragment")
 		for i in range(len(fragment_atoms)):
-			output.append("%7s |%6s  |%3s  |%s" % (i + 1, charges[i], BDAs[i], " ".join(map(lambda data : "%8d" % data, fragment_members[i]))))
+			output.append("{0:7} |{1:6}  |{2:3}  |{3}".format(i + 1, charges[i], BDAs[i], " ".join(map(lambda data : "{0:8d}".format(data), fragment_members[i]))))
 		output.append("\n<< connections (ex. \"Next_fragment_atom    Prev_fragment_atom\")>>")
 		for i in range(len(connections)):
-			output.append("".join(map(lambda data : "%8d" % data, connections[i])))
+			output.append("".join(map(lambda data : "{0:8d}".format(data), connections[i])))
 		output.append("\n")
 		output.append("===============< namelist >===============")
-		for line in namelists:
-			if re_natom.search(line):
+		for line_val in namelists:
+			if RE_NATOM.search(line_val):
 				# 原子数の更新
 				atom = sum(fragment_atoms)
-				line = re.sub(r"\d+", str(atom), line)
-			elif re_nf.search(line):
+				line_val = re.sub(r"\d+", str(atom), line_val)
+			elif RE_NF.search(line_val):
 				# フラグメント数の更新
 				fragment = len(fragment_members)
-				line = re.sub(r"\d+", str(fragment), line)
-			elif re_charge.search(line):
+				line_val = re.sub(r"\d+", str(fragment), line_val)
+			elif RE_CHARGE.search(line_val):
 				# 電荷の更新
 				charge = sum(charges)
-				line = re.sub(r"-?\d+", str(charge), line)
-			elif re_autofrag.search(line):
+				line_val = re.sub(r"-?\d+", str(charge), line_val)
+			elif RE_AUTOFRAG.search(line_val):
 				# autofrag の更新
-				line = re.sub(r"=.+$", "='OFF'", line)
+				line_val = re.sub(r"=.+$", "='OFF'", line_val)
 
-			output.append(line)
+			output.append(line_val)
 
 		# 書き出し
-		write_data(output, args.output_path)
+		write_data(output, args.OUTPUT_FILE)
 
 
 	elif args.func == "rewrite":
 		# リロード
 
 		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input_path)
+		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.INPUT_FILE)
 
 		# 整形
 		output = []
@@ -481,32 +496,32 @@ if __name__ == '__main__':
 			output.append("".join(map(lambda data : "%8d" % data, connections[i])))
 		output.append("\n")
 		output.append("===============< namelist >===============")
-		for line in namelists:
-			if re_natom.search(line):
+		for line_val in namelists:
+			if RE_NATOM.search(line_val):
 				# 原子数の更新
 				atom = sum(fragment_atoms)
-				line = re.sub(r"\d+", str(atom), line)
-			elif re_nf.search(line):
+				line_val = re.sub(r"\d+", str(atom), line_val)
+			elif RE_NF.search(line_val):
 				# フラグメント数の更新
 				fragment = len(fragment_members)
-				line = re.sub(r"\d+", str(fragment), line)
-			elif re_charge.search(line):
+				line_val = re.sub(r"\d+", str(fragment), line_val)
+			elif RE_CHARGE.search(line_val):
 				# 電荷の更新
 				charge = sum(charges)
-				line = re.sub(r"-?\d+", str(charge), line)
-			elif re_autofrag.search(line):
+				line_val = re.sub(r"-?\d+", str(charge), line_val)
+			elif RE_AUTOFRAG.search(line):
 				# autofrag の更新
-				line = re.sub(r"=.+$", "='OFF'", line)
-			output.append(line)
+				line_val = re.sub(r"=.+$", "='OFF'", line_val)
+			output.append(line_val)
 
 		# 書き出し
-		write_data(output, args.output_path)
+		write_data(output, args.OUTPUT_FILE)
 
 	elif args.func == "output":
 		# ajf ファイルに変換
 
 		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.input_path)
+		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_fred(args.INPUT_FILE)
 
 		file_reference = ""
 		if args.pdb != None:
@@ -516,10 +531,10 @@ if __name__ == '__main__':
 			for item in namelists:
 				if "ReadGeom" in item:
 					file_reference = item.strip()
-					file_reference = re_wsp.sub("", file_reference)
+					file_reference = RE_WSP.sub("", file_reference)
 					file_reference = file_reference.replace("ReadGeom=", "")
-					file_reference = re_quote_h.sub("", file_reference)
-					file_reference = re_quote_t.sub("", file_reference)
+					file_reference = RE_QUOTE_H.sub("", file_reference)
+					file_reference = RE_QUOTE_T.sub("", file_reference)
 					check_exist(file_reference, 2)
 					break
 
@@ -528,51 +543,51 @@ if __name__ == '__main__':
 		# 整形
 		output = []
 		flag_fragment = 0
-		for line in namelists:
-			if re_natom.search(line):
+		for line_val in namelists:
+			if RE_NATOM.search(line_val):
 				# 原子数の更新
 				atom = sum(fragment_atoms)
-				line = re.sub(r"\d+", str(atom), line)
-			elif re_nf.search(line):
+				line_val = re.sub(r"\d+", str(atom), line_val)
+			elif RE_NF.search(line_val):
 				# フラグメント数の更新
 				fragment = len(fragment_members)
-				line = re.sub(r"\d+", str(fragment), line)
-			elif re_charge.search(line):
+				line_val = re.sub(r"\d+", str(fragment), line_val)
+			elif RE_CHARGE.search(line_val):
 				# 電荷の更新
 				charge = sum(charges)
-				line = re.sub(r"-?\d+", str(charge), line)
-			elif re_autofrag.search(line):
+				line_val = re.sub(r"-?\d+", str(charge), line_val)
+			elif RE_AUTOFRAG.search(line_val):
 				# autofrag の更新
-				line = re.sub(r"=.+$", "='OFF'", line)
-			elif re_fragment.search(line):
+				line_val = re.sub(r"=.+$", "='OFF'", line_val)
+			elif RE_FRAGMENT.search(line_val):
 				# フラグメント情報書き出し場所を検索
 				flag_fragment = 1
-			elif flag_fragment == 1 and re_coord.search(line):
+			elif flag_fragment == 1 and RE_COORD.search(line_val):
 				# フラグメント情報の書き出し
-				for line in convert_ajf(fragment_atoms, 8, 10):
-					output.append(line)
+				for line_val in convert_ajf(fragment_atoms, 8, 10):
+					output.append(line_val)
 
-				for line in convert_ajf(charges, 8, 10):
-					output.append(line)
+				for line_val in convert_ajf(charges, 8, 10):
+					output.append(line_val)
 
-				for line in convert_ajf(BDAs, 8, 10):
-					output.append(line)
+				for line_val in convert_ajf(BDAs, 8, 10):
+					output.append(line_val)
 
 				for j in range(len(fragment_members)):
-					for line in convert_ajf(fragment_members[j], 8, 10):
-						output.append(line)
+					for line_val in convert_ajf(fragment_members[j], 8, 10):
+						output.append(line_val)
 
 				for j in range(len(connections)):
-					for line in convert_ajf(connections[j], 8, 10):
-						output.append(line)
+					for line_val in convert_ajf(connections[j], 8, 10):
+						output.append(line_val)
 				flag_fragment = 0
 				continue
-			output.append(line)
+			output.append(line_val)
 
 		# 出力
-		if args.flag_overwrite == False:
-			check_overwrite(args.output_path)
-		write_data(output, args.output_path)
+		if args.FLAG_OVERWRITE == False:
+			check_overwrite(args.OUTPUT_FILE)
+		write_data(output, args.OUTPUT_FILE)
 
 	elif args.func == "autofrag":
 		pass
