@@ -31,8 +31,8 @@ class FredData:
 		return len(self._fragments)
 
 	@property
-	def get_last_fragment_index(self):
-		return self._fragments[-1].get_fragment_index()
+	def last_fragment_index(self):
+		return self._fragments[-1].fragment_index
 
 
 	def _load_file(self, input_file):
@@ -60,10 +60,10 @@ class FredData:
 
 				if flag_read == 1 and RE_FRAGMENT.search(line):
 					fragment = FragmentData(line)
-					if fragment.get_charge() != "ERR":
-						self._charge += fragment.get_charge()
+					if fragment.charge != "ERR":
+						self._charge += fragment.charge
 					self._fragments.append(fragment)
-					self._atom += len(fragment.get_atoms())
+					self._atom += len(fragment.atoms)
 
 				elif flag_read == 2 and RE_CONNECTION.search(line):
 					self._connection.append([int(x) for x in line.strip().split()])
@@ -83,11 +83,11 @@ class FredData:
 			self
 		"""
 		for idx, fragment in enumerate(self._fragments):
-			fragment.duplicate_atom(obj_fragment.get_atoms())
-			if len(fragment.get_atoms()) == 0:
+			fragment.delete_duplicate_atom(obj_fragment.atoms)
+			if len(fragment.atoms) == 0:
 				self._fragments.pop(idx)
 
-		self._atom += len(obj_fragment.get_atoms())
+		self._atom += len(obj_fragment.atoms)
 		self._fragments.append(obj_fragment)
 		return self
 
@@ -118,7 +118,7 @@ class FredData:
 			output_file (str): output file
 		"""
 		re_NF = re.compile(r"NF=[\s\t]*-?\d+")
-		tmp_fragments = sorted([[obj_fragment.get_min_idx(), obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
+		tmp_fragments = sorted([[obj_fragment.min_idx, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
 		self._fragments = [obj_fragment[1].update_fragment_index(idx + 1) for idx, obj_fragment in enumerate(tmp_fragments)]
 		tmp_connection_int = sorted([x for x in self._connection if isinstance(x[0], int)], key=lambda x : x[0])
 		tmp_connection_str = sorted([x for x in self._connection if isinstance(x[0], str)], key=lambda x : x[0])
@@ -128,7 +128,7 @@ class FredData:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
 			for idx, fragment in enumerate(self._fragments):
 				fragment.update_fragment_index(idx + 1)
-				obj_output.write("{0:>7} |{1:>6}  |{2:>3}  |{3}\n".format(fragment.get_fragment_index(), fragment.get_charge(), fragment.get_bda(), " ".join(["{0:>8}".format(x) for x in fragment.get_atoms()])))
+				obj_output.write("{0:>7} |{1:>6}  |{2:>3}  |{3}\n".format(fragment.fragment_index, fragment.charge, fragment.bda, " ".join(["{0:>8}".format(x) for x in fragment.atoms])))
 			obj_output.write("\n")
 
 			obj_output.write("<< connections (ex. \"Next_fragment_atom   Prev_fragment_atom\") >>\n")
