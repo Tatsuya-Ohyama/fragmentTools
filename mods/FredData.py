@@ -3,16 +3,19 @@
 
 import sys
 import re
-from classes.FragmentData import FragmentData
+from mods.FragmentData import FragmentData
+
+
 
 # =============== variables =============== #
-re_fragment = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
-re_connection = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
+RE_FRAGMENT = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
+RE_CONNECTION = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
+
 
 
 # =============== classes =============== #
 class FredData:
-	""" fred ファイルのクラス """
+	""" fred File class """
 	def __init__(self, input_file):
 		self._charge = 0
 		self._atom = 0
@@ -23,8 +26,22 @@ class FredData:
 		self._load_file(input_file)
 
 
+	@property
+	def fragment_number(self):
+		return len(self._fragments)
+
+	@property
+	def get_last_fragment_index(self):
+		return self._fragments[-1].get_fragment_index()
+
+
 	def _load_file(self, input_file):
-		""" fred データを読み込むメソッド """
+		"""
+		Method to read .fred file
+
+		Args:
+			input_file (str): .fred file
+		"""
 		with open(input_file, "r") as obj_input:
 			cnt_line = 0
 			flag_read = 0
@@ -41,14 +58,14 @@ class FredData:
 				elif "namelist" in line:
 					flag_read = 3
 
-				if flag_read == 1 and re_fragment.search(line):
+				if flag_read == 1 and RE_FRAGMENT.search(line):
 					fragment = FragmentData(line)
 					if fragment.get_charge() != "ERR":
 						self._charge += fragment.get_charge()
 					self._fragments.append(fragment)
 					self._atom += len(fragment.get_atoms())
 
-				elif flag_read == 2 and re_connection.search(line):
+				elif flag_read == 2 and RE_CONNECTION.search(line):
 					self._connection.append([int(x) for x in line.strip().split()])
 
 				elif flag_read == 3:
@@ -56,7 +73,15 @@ class FredData:
 
 
 	def add_fragment(self, obj_fragment):
-		""" フラグメントを追加するメソッド """
+		"""
+		Method to add fragment
+
+		Args:
+			obj_fragment (FragmentData object): FragmentData object
+
+		Returns:
+			self
+		"""
 		for idx, fragment in enumerate(self._fragments):
 			fragment.duplicate_atom(obj_fragment.get_atoms())
 			if len(fragment.get_atoms()) == 0:
@@ -68,7 +93,15 @@ class FredData:
 
 
 	def add_connection(self, connection):
-		""" フラグメントの接続情報を増やすメソッド """
+		"""
+		Method to add fragment connection
+
+		Args:
+			connection (int or list): connection information
+
+		Returns:
+			self
+		"""
 		if isinstance(connection, int):
 			for i in range(connection):
 				self._connection.append(["*", "*"])
@@ -77,23 +110,18 @@ class FredData:
 		return self
 
 
-	def get_fragment_number(self):
-		""" フラグメント数を返すメソッド """
-		return len(self._fragments)
-
-
-	def get_last_fragment_index(self):
-		""" 最後のフラグメント番号を返すメソッド """
-		return self._fragments[-1].get_fragment_index()
-
-
 	def write_file(self, output_file):
-		""" ファイルに出力するメソッド """
+		"""
+		Method to write out file
+
+		Args:
+			output_file (str): output file
+		"""
 		re_NF = re.compile(r"NF=[\s\t]*-?\d+")
-		tmp_fragments = sorted([[obj_fragment.get_min_idx(), obj_fragment] for obj_fragment in self._fragments], key = lambda x : x[0])
+		tmp_fragments = sorted([[obj_fragment.get_min_idx(), obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
 		self._fragments = [obj_fragment[1].update_fragment_index(idx + 1) for idx, obj_fragment in enumerate(tmp_fragments)]
-		tmp_connection_int = sorted([x for x in self._connection if isinstance(x[0], int)], key = lambda x : x[0])
-		tmp_connection_str = sorted([x for x in self._connection if isinstance(x[0], str)], key = lambda x : x[0])
+		tmp_connection_int = sorted([x for x in self._connection if isinstance(x[0], int)], key=lambda x : x[0])
+		tmp_connection_str = sorted([x for x in self._connection if isinstance(x[0], str)], key=lambda x : x[0])
 		self._connection = tmp_connection_int + tmp_connection_str
 
 		with open(output_file, "w") as obj_output:
@@ -113,8 +141,3 @@ class FredData:
 				if redb_NF:
 					line = line[: redb_NF.start()] + "NF={0}".format(len(self._fragments)) + line[redb_NF.end() :]
 				obj_output.write(line + "\n")
-
-
-# =============== main =============== #
-# if __name__ == '__main__':
-# 	main()
