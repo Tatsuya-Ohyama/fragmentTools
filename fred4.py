@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-fred4 - fragment editor for mizuho ABINIT-MP
+fred4 - fragment editor
 """
 
 import sys, signal
@@ -11,7 +11,11 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 import argparse
 import os
 import re
+
 from mods.func_prompt_io import *
+from mods.FileAJF import FileAJF
+from mods.FileFred import FileFred
+from mods.FragmentData import FragmentData
 
 
 
@@ -25,14 +29,15 @@ RE_NAMELIST_H = re.compile(r"^[\s\t]*\&")
 RE_NAMELIST_T = re.compile(r"^[\s\t]*/$")
 RE_DIGIT = re.compile(r"[\d\s]+")
 
-
-# ネームリスト更新
 RE_NATOM = re.compile(r"^[\s\t]*Natom", re.IGNORECASE)
 RE_NF = re.compile(r"NF", re.IGNORECASE)
 RE_CHARGE = re.compile(r"^[\s\t]*Charge", re.IGNORECASE)
 RE_AUTOFRAG = re.compile(r"^[\s\t]*AutoFrag", re.IGNORECASE)
 RE_FRAGMENT = re.compile(r"\&FRAGMENT", re.IGNORECASE)
 RE_COORD = re.compile(r"\{\.{3}\}")
+
+RE_NAMELIST_FRAGMENT_H = re.compile(r"^[\s\t]*\&FRAGMENT")
+RE_NAMELIST_FRAGMENT_T = re.compile(r"^[\s\t]*\/")
 
 ATOM_CHARGES = {
 	"H": 1, "Li": 3, "Be": 4, "B": 5,
@@ -45,35 +50,15 @@ ATOM_CHARGES = {
 
 
 # =============== functions =============== #
-# split_n
-def split_n(line, length):
+def check_electrons(fragment_members, charges, pdb):
 	"""
-	Function to split by n-chars
+	Function to check system charge
 
 	Args:
-		line (str): target string
-		length (int): split length
-
-	Returns:
-		list
+		fragment_members (list): fragment information
+		charges (list): fragment charge
+		pdb (str): .pdb file
 	"""
-	line = line.rstrip("\r\n")
-	datas = []
-	pos = 0
-	while pos + length <= len(line):
-		datas.append(line[pos : pos + length])
-		pos += length
-
-	if pos != len(line):
-		datas.append(line[pos:len(line)])
-
-	datas = list(map(lambda data:data.strip(), datas))
-
-	return datas
-
-
-# check_charge
-def check_charge(fragment_members, charges, pdb):
 	atom_orders = []
 	atom_types = []
 
@@ -116,173 +101,38 @@ def check_charge(fragment_members, charges, pdb):
 		if user.lower() != "y":
 			sys.exit(0)
 	else:
-		sys.stderr.write("INFO: check_charge is ok.\n")
+		sys.stderr.write("INFO: check_electrons is ok.\n")
 
 
-# convert_ajf
-def convert_ajf(lists, width, n):
-	lists = list(map(lambda data : str(data), lists))
-	new_lists = [""]
+def convert_ajf(fragment_info, width, n):
+	"""
+	Function to convert fragment information to .ajf file
 
-	format_data = "%" + str(width) + "s"
+	Args:
+		fragment_info (list): fragment information
+		width (int): width
+		n (int): number of elements
+
+	Returns:
+		list
+	"""
+	fragment_info = list(map(lambda data : str(data), fragment_info))
+	new_fragment_info = [""]
+
+	format_data = "{" + str(width) + "}"
 
 	index = 0
-	for i in range(len(lists)):
-		new_lists[index] += format_data % lists[i]
+	for i in range(len(fragment_info)):
+		new_fragment_info[index] += format_data.format(fragment_info[i])
 		if i != 0 and (i + 1) % n == 0:
 			index += 1
-			new_lists.append("")
+			new_fragment_info.append("")
 
-	if len(new_lists[len(new_lists) - 1]) == 0:
+	if len(new_fragment_info[len(new_fragment_info) - 1]) == 0:
 		# 指定された個数でちょうど終わる場合は、無駄な要素が追加されるので削除する
-		del(new_lists[len(new_lists) - 1])
+		del(new_fragment_info[len(new_fragment_info) - 1])
 
-	return new_lists
-
-
-# load_ajf
-def load_ajf(file_input, file_reference):
-	re_namelist_fragment_h = re.compile(r"^[\s\t]*\&FRAGMENT")
-	re_namelist_fragment_t = re.compile(r"^[\s\t]*\/")
-
-	flag_read = 0
-	atom = 0
-	atom_now = 0
-	fragment = 0
-	fragment_now = 0
-	namelists = []
-	fragment_atoms = []
-	fragment_members = []
-	fragment_members_tmp = []
-	charges = []
-	BDAs = []
-	connections = []
-
-	with open(file_input, "r") as obj_input:
-		for line_idx, line_val in enumerate(obj_input, 1):
-			if flag_read == 0:
-				# ネームリスト取得
-				line_val = line_val.strip()
-
-				if len(line_val.strip()) == 0:
-					# 空行はスキップ
-					continue
-
-				if re_namelist_fragment_h.search(line_val):
-					# FRAGMENT ネームリストの始端
-					flag_read = 1
-
-				elif "ReadGeom" in line_val:
-					if file_reference != None:
-						# 参照 PDB が指定されていた場合
-						check_file(file_reference)
-					else:
-						# 参照 PDB が指定されていない場合
-						file_reference = RE_WSP.sub("", line_val)
-						file_reference = file_reference.replace("ReadGeom=", "")
-						file_reference = RE_QUOTE_H.sub("", file_reference)
-						file_reference = RE_QUOTE_T.sub("", file_reference)
-
-					check_file(file_reference)
-
-					with open(file_reference, "r") as obj_pdb:
-						for p_line in obj_pdb:
-							if p_line.startswith("ATOM") or pline.startswith("HETATM"):
-								atom += 1
-
-				if re_namelist_fragment_t.search(line_val):
-					line_val = "/\n"
-				elif not RE_NAMELIST_H.search(line_val):
-					line_val = "  " + line_val
-				namelists.append(line_val)
-
-			elif 0 < flag_read:
-				# フラグメント情報取得
-				line_val = line_val.rstrip("\r\n")
-
-				if re_namelist_fragment_t.search(line_val):
-					# FRAGMENT ネームリストの終端
-					line_val = "{...}\n/\n"
-					flag_read = 0
-					namelists.append(line_val)
-
-				else:
-					# 8 文字ずつ区切る
-					datas = list(map(lambda data : int(data), split_n(line_val, 8)))
-
-					if flag_read == 1:
-						# フラグメント構成原子取得
-						if "0" in datas:
-							# 構成原子 0 のフラグメントがある場合
-							sys.stderr.write("ERROR: Invalid ajf file in {0}\n".format(line_idx))
-							sys.stderr.write("       zero atoms in fragment found\n")
-							sys.exit(1)
-
-						fragment += len(datas)
-						fragment_atoms.extend(datas)
-
-						atom_now += sum(datas)
-						if atom == atom_now:
-							# PDB の総原子数と現在の原子数が一致した場合
-							flag_read = 2
-						elif atom < atom_now:
-							# PDB の総原子数以上の原子を検出した場合
-							sys.stderr.write("ERROR: The number of atoms in PDB file (%s) and ajf file mismatched (%d / %d)\n" % (file_reference, atom_now, atom))
-							sys.stderr.write("       Maybe wrong PDB file was specified.\n")
-							sys.stderr.write("       Please fix ReadGeom in ajf file, OR use -P option.\n")
-							sys.exit(1)
-
-					elif flag_read == 2:
-						# 電荷情報取得
-						fragment_now += len(datas)
-						charges.extend(datas)
-
-						if fragment == fragment_now:
-							# フラグメント数が総フラグメント数と一致した場合
-							flag_read = 3
-							fragment_now = 0
-						elif fragment < fragment_now:
-							# フラグメント数が総フラグメント数以上のフラグメントを検出した場合
-							sys.stderr.write("ERROR: The number of fragments mismatched in charge section (%d / %d)\n" % (fragment_now, fragment))
-							sys.exit(1)
-
-					elif flag_read == 3:
-						# BDA 取得
-						fragment_now += len(datas)
-						BDAs.extend(datas)
-
-						if fragment == fragment_now:
-							# フラグメント数が総フラグメント数と一致した場合
-							flag_read = 4
-							fragment_now = 0
-						elif fragment < fragment_now:
-							# フラグメント数が総フラグメント数以上のフラグメントを検出した場合
-							sys.stderr.write("ERROR: The number of fragments mismatched in BDA section\n" % (fragment_now, fragment))
-							sys.exit(1)
-
-					elif flag_read == 4:
-						# フラグメント構成原子の原子順序番号取得
-						fragment_members_tmp.extend(datas)
-
-						if fragment_atoms[fragment_now] <= len(fragment_members_tmp):
-							fragment_now += 1
-							fragment_members.append(fragment_members_tmp)
-							fragment_members_tmp = []
-
-							if fragment == fragment_now:
-								# フラグメント数が総フラグメント数と一致した場合
-								flag_read = 5
-								now_fragment = 0
-							elif fragment < fragment_now:
-								# フラグメント数が総フラグメント数以上のフラグメントを検出した場合
-								sys.stderr.write("ERROR: The number of fragments mismatched in fragment atom section\n" % (fragment_now, fragment))
-								sys.exit(1)
-
-					elif flag_read == 5:
-						# 接続情報取得
-						line_val = line_val.strip()
-						connections.append(list(map(lambda data : int(data),RE_WSP.split(line_val))))
-	return fragment_atoms, charges, BDAs, fragment_members, connections, namelists
+	return new_fragment_info
 
 
 # load_fred
@@ -400,7 +250,7 @@ if __name__ == '__main__':
 		parser_edit.set_defaults(func="edit")
 		parser_edit.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="ajf file")
 		parser_edit.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="output file")
-		parser_edit.add_argument("-p", "--pdb", metavar="PDB", help="reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
+		parser_edit.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="PDB", help="reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_edit.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_rewrite = subparser.add_parser("rewrite", help="Rewrite fred fred -> fred")
@@ -440,44 +290,57 @@ if __name__ == '__main__':
 
 	check_exist(args.INPUT_FILE, 2)
 
+	obj_fred = FragmentData()
 	if args.func == "edit":
-		# 編集ファイルに変換
+		# convert to edit-style
 
-		# 読み込み
-		(fragment_atoms, charges, BDAs, fragment_members, connections, namelists) = load_ajf(args.input, args.pdb)
+		# read .ajf file
+		obj_ajf = FileAJF(args.INPUT_FILE)
+		list_fragments, list_connections = obj_ajf.create_fragment_objects(args.PDB_FILE)
 
-		# 整形
-		flag_fragment = 0
-		output = []
-		output.append("  FNo.  | charge | BDA | atoms of fragment")
-		for i in range(len(fragment_atoms)):
-			output.append("{0:7} |{1:6}  |{2:3}  |{3}".format(i + 1, charges[i], BDAs[i], " ".join(map(lambda data : "{0:8d}".format(data), fragment_members[i]))))
-		output.append("\n<< connections (ex. \"Next_fragment_atom    Prev_fragment_atom\")>>")
-		for i in range(len(connections)):
-			output.append("".join(map(lambda data : "{0:8d}".format(data), connections[i])))
-		output.append("\n")
-		output.append("===============< namelist >===============")
-		for line_val in namelists:
-			if RE_NATOM.search(line_val):
-				# 原子数の更新
-				atom = sum(fragment_atoms)
-				line_val = re.sub(r"\d+", str(atom), line_val)
-			elif RE_NF.search(line_val):
-				# フラグメント数の更新
-				fragment = len(fragment_members)
-				line_val = re.sub(r"\d+", str(fragment), line_val)
-			elif RE_CHARGE.search(line_val):
-				# 電荷の更新
-				charge = sum(charges)
-				line_val = re.sub(r"-?\d+", str(charge), line_val)
-			elif RE_AUTOFRAG.search(line_val):
-				# autofrag の更新
-				line_val = re.sub(r"=.+$", "='OFF'", line_val)
+		# convert .fred file
+		obj_fred = FileFred()
+		obj_fred.set_n_atom(sum([len(v.atoms) for v in list_fragments]))
+		obj_fred.set_charge(sum([v.charge for v in list_fragments]))
+		obj_fred.set_fragments(list_fragments)
+		obj_fred.set_connections(list_connections)
+		obj_fred.set_other_info(obj_ajf.parameter_list(True))
 
-			output.append(line_val)
+		if args.FLAG_OVERWRITE == False:
+			check_overwrite(args.OUTPUT_FILE)
+		obj_fred.write(args.OUTPUT_FILE)
+		# # 整形
+		# flag_fragment = 0
+		# output = []
+		# output.append("  FNo.  | charge | BDA | atoms of fragment")
+		# for i in range(len(fragment_atoms)):
+		# 	output.append("{0:7} |{1:6}  |{2:3}  |{3}".format(i + 1, charges[i], BDAs[i], " ".join(map(lambda data : "{0:8d}".format(data), fragment_members[i]))))
+		# output.append("\n<< connections (ex. \"Next_fragment_atom    Prev_fragment_atom\")>>")
+		# for i in range(len(connections)):
+		# 	output.append("".join(map(lambda data : "{0:8d}".format(data), connections[i])))
+		# output.append("\n")
+		# output.append("===============< namelist >===============")
+		# for line_val in namelists:
+		# 	if RE_NATOM.search(line_val):
+		# 		# 原子数の更新
+		# 		atom = sum(fragment_atoms)
+		# 		line_val = re.sub(r"\d+", str(atom), line_val)
+		# 	elif RE_NF.search(line_val):
+		# 		# フラグメント数の更新
+		# 		fragment = len(fragment_members)
+		# 		line_val = re.sub(r"\d+", str(fragment), line_val)
+		# 	elif RE_CHARGE.search(line_val):
+		# 		# 電荷の更新
+		# 		charge = sum(charges)
+		# 		line_val = re.sub(r"-?\d+", str(charge), line_val)
+		# 	elif RE_AUTOFRAG.search(line_val):
+		# 		# autofrag の更新
+		# 		line_val = re.sub(r"=.+$", "='OFF'", line_val)
 
-		# 書き出し
-		write_data(output, args.OUTPUT_FILE)
+		# 	output.append(line_val)
+
+		# # 書き出し
+		# write_data(output, args.OUTPUT_FILE)
 
 
 	elif args.func == "rewrite":
@@ -538,7 +401,7 @@ if __name__ == '__main__':
 					check_exist(file_reference, 2)
 					break
 
-		check_charge(fragment_members, charges, file_reference)
+		check_electrons(fragment_members, charges, file_reference)
 
 		# 整形
 		output = []
