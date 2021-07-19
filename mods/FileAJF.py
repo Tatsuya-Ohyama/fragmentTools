@@ -196,7 +196,6 @@ class FileAJF:
 					sys.exit(1)
 
 			elif n_step == 1:
-				print(1, line_val)
 				# charge information
 				for obj_fragment, charge in zip(list_fragments[n_fragment_curr : n_fragment_curr + len(datas)], datas):
 					obj_fragment.set_charge(charge)
@@ -217,7 +216,6 @@ class FileAJF:
 					sys.exit(1)
 
 			elif n_step == 2:
-				print(2, line_val)
 				# BDA information
 				for obj_fragment, bda in zip(list_fragments[n_fragment_curr : n_fragment_curr + len(datas)], datas):
 					obj_fragment.set_bda(bda)
@@ -238,7 +236,6 @@ class FileAJF:
 					sys.exit(1)
 
 			elif n_step == 3:
-				print(3, line_val)
 				# member of atoms in fragment
 				obj_fragment = list_fragments[fragment_idx]
 				list_atoms = obj_fragment.atoms
@@ -265,7 +262,6 @@ class FileAJF:
 					sys.exit(1)
 
 			elif n_step == 4:
-				print(4, line_val)
 				# connection information
 				list_connections.append(datas)
 

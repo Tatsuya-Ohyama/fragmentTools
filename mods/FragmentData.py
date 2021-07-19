@@ -40,7 +40,6 @@ class FragmentData:
 
 	@property
 	def min_index(self):
-		print(self._atoms)
 		return min(self._atoms)
 
 

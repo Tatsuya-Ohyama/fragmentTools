@@ -3,6 +3,7 @@
 
 import sys
 import re
+
 from mods.FragmentData import FragmentData
 
 
@@ -10,6 +11,7 @@ from mods.FragmentData import FragmentData
 # =============== variables =============== #
 RE_FRAGMENT = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
 RE_CONNECTION = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
+RE_NF = re.compile(r"NF=[\s\t]*-?\d+")
 
 
 
@@ -199,7 +201,6 @@ class FileFred:
 		Returns:
 			self
 		"""
-		re_NF = re.compile(r"NF=[\s\t]*-?\d+")
 		tmp_fragments = sorted([[obj_fragment.min_index, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
 		self._fragments = [obj_fragment[1].set_fragment_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
 		tmp_connection_int = sorted([x for x in self._connection if isinstance(x[0], int)], key=lambda x : x[0])
@@ -220,7 +221,7 @@ class FileFred:
 
 			obj_output.write("===============< namelist >===============\n")
 			for line_val in self._others:
-				redb_NF = re_NF.search(line_val)
+				redb_NF = RE_NF.search(line_val)
 				if redb_NF:
 					line_val = line_val[: redb_NF.start()] + "NF={0}".format(len(self._fragments)) + line_val[redb_NF.end() :]
 				obj_output.write(line_val)
