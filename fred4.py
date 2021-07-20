@@ -16,6 +16,8 @@ from mods.func_prompt_io import *
 from mods.FileAJF import FileAJF
 from mods.FileFred import FileFred
 from mods.FragmentData import FragmentData
+from mods.MoleculeInformation import MoleculeInformation
+from mods.func_string import target_range
 
 
 
@@ -24,6 +26,7 @@ from mods.FragmentData import FragmentData
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
 RE_DIGIT = re.compile(r"[\d\s]+")
+RE_CONNECT = re.compile(r'^\d+-\d+$')
 
 ATOM_ELECTRON = {
 	"H": 1, "Li": 3, "Be": 4, "B": 5,
@@ -39,7 +42,7 @@ ATOM_ELECTRON = {
 # =============== functions =============== #
 def check_electrons(list_obj_fragments, pdb_file):
 	"""
-	Function to check system charge
+	Function to check number of electrons
 
 	Args:
 		fragment_members (list): fragment information
@@ -102,48 +105,50 @@ if __name__ == '__main__':
 		parser_edit = subparser.add_parser("edit", help="Convert ajf to fred (ajf -> fred)")
 		parser_edit.set_defaults(func="edit")
 		parser_edit.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.ajf", required=True, help="ajf file")
-		parser_edit.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", help="fred file")
+		parser_edit.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", required=True, help="fred file")
 		parser_edit.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="REF.pdb", help="reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_edit.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_rewrite = subparser.add_parser("rewrite", help="Rewrite fred fred -> fred")
 		parser_rewrite.set_defaults(func="rewrite")
 		parser_rewrite.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
-		parser_rewrite.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", help="fred file")
+		parser_rewrite.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", required=True, help="fred file")
 		parser_rewrite.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_output = subparser.add_parser("output", help="Convert fred to ajf (fred -> ajf)")
 		parser_output.set_defaults(func="output")
 		parser_output.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
-		parser_output.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.ajf", help="ajf file")
+		parser_output.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.ajf", required=True, help="ajf file")
 		parser_output.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="REF.pdb", help="Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_output.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_autofrag = subparser.add_parser("autofrag", help="Auto fragmentation for PDB (pdb -> fred)")
 		parser_autofrag.set_defaults(func="autofrag")
-		parser_autofrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="PDB")
-		parser_autofrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
+		parser_autofrag.add_argument("-p", dest="INPUT_FILE", metavar="INPUT.pdb", required=True, help="structure file")
+		parser_autofrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", required=True, help="fred file")
 		parser_autofrag.add_argument("-s", "--separate", action="store_true", help="Nucleotide is separates to base and sugar+phosphate")
 		parser_autofrag.add_argument("-v", "--version", choices=["3", "5", "m"], help="ajf version: 3 = abinit-mp3, 5 = abinitmp5, m = mizuho")
 		parser_autofrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_editfrag = subparser.add_parser("editfrag", help="Create new fred in which fragments were devided based on PDB and fred (pdb + fred -> fred)")
 		parser_editfrag.set_defaults(func="editfrag")
-		parser_editfrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT", required=True, help="PDB")
-		parser_editfrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT", help="Output (Default: STDOUT)")
-		parser_editfrag.add_argument("-f", metavar="fred", dest="fred", required=True, help="fred")
-		parser_editfrag.add_argument("-b", metavar="pdb", dest="pdb", required=True, help="pdb")
-		parser_editfrag.add_argument("-n", metavar="pdb", dest="pdb", required=True, nargs="+", help="pdb for each fragments")
+		parser_editfrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
+		parser_editfrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", help="fred file")
+		parser_editfrag.add_argument("-p", dest="STRUCTURE_FILE", metavar="STRUCTURE.pdb", required=True, help="system structure file")
+		parser_editfrag.add_argument("-n", dest="FRAGMENT_STRUCTURE_LIST", metavar="FRAGMENT_STRCUTURE.pdb", required=True, nargs="+", help="fragment structure file")
+		parser_editfrag.add_argument("-m", dest="FLAG_MULTI", action="store_true", default=False, help="applying separation to other the same type residues")
+		parser_editfrag.add_argument("-c", dest="CONNECTION_LIST", metavar = "ATOM1-ATOM2", nargs = "+", required=True, help = "connection list described by Ambermask (Ex: :EG@C9-:EG@C10  34-25)")
 		parser_editfrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		args = parser.parse_args()
+
 	except TypeError:
 		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
 		sys.exit(1)
 
+
 	check_exist(args.INPUT_FILE, 2)
 
-	obj_fred = FragmentData()
 	if args.func == "edit":
 		# edit mode (convert to edit-style)
 
@@ -168,6 +173,7 @@ if __name__ == '__main__':
 	elif args.func == "rewrite":
 		# rewrite mode
 
+		# read .fred file
 		obj_fred = FileFred()
 		obj_fred.read(args.INPUT_FILE)
 
@@ -179,9 +185,11 @@ if __name__ == '__main__':
 	elif args.func == "output":
 		# output mode (convert to ajf)
 
+		# read .fred file
 		obj_fred = FileFred()
 		obj_fred.read(args.INPUT_FILE)
 
+		# convert .ajf file
 		obj_ajf = FileAJF()
 		obj_ajf.set_parameters(obj_fred.complete_parameters)
 
@@ -196,8 +204,48 @@ if __name__ == '__main__':
 
 
 	elif args.func == "autofrag":
+		# autofrag mode
 		pass
 
 
 	elif args.func == "editfrag":
-		pass
+		# editfrag mode
+
+		# read structure
+		check_exist(args.STRUCTURE_FILE, 2)
+		base_structure = MoleculeInformation(args.STRUCTURE_FILE)
+
+		# read .fred
+		obj_fred = FileFred().read(args.INPUT_FILE)
+
+		cnt_total = 0
+		for structure_idx, fragment_structure_file in enumerate(args.FRAGMENT_STRUCTURE_LIST):
+			# loop for new fragment structure
+
+			# read fragment structure
+			check_exist(fragment_structure_file, 2)
+			fragment_structure = MoleculeInformation(fragment_structure_file)
+
+			# change atom member in existing fragment
+			cnt = 0
+			for obj_fragment in fragment_structure.output_fragmentdata("object", base_structure, args.FLAG_MULTI):
+				obj_fred.add_fragment(obj_fragment)
+				cnt += 1
+			cnt_total += cnt
+			sys.stderr.write("Replace {0} fragments with {1}\n".format(cnt, fragment_structure_file))
+
+		# add connection
+		for str_connection in args.CONNECTION_LIST:
+			atom1, atom2 = str_connection.split("-", maxsplit=1)
+			if RE_CONNECT.search(str_connection):
+				# direct format of connection (atom indexes)
+				obj_fred.add_connection([atom1, atom2])
+			else:
+				mask_list1 = base_structure.convert_number(atom1)
+				mask_list2 = base_structure.convert_number(atom2)
+				for mask1, mask2 in zip(mask_list1, mask_list2):
+					obj_fred.add_connection([mask1, mask2])
+
+		if args.FLAG_OVERWRITE == False:
+			check_overwrite(args.OUTPUT_FILE)
+		obj_fred.write(args.OUTPUT_FILE)

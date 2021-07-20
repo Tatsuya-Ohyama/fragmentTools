@@ -9,10 +9,12 @@ import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
-from classes.func_prompt_io import check_exist, check_overwrite
-from classes.MoleculeInformation import MoleculeInformation
-from classes.FragmentData import FragmentData
-from classes.FredData import FredData
+from mods.func_prompt_io import check_exist, check_overwrite
+from mods.MoleculeInformation import MoleculeInformation
+from mods.FragmentData import FragmentData
+from mods.FileFred import FileFred
+
+
 
 # =============== main =============== #
 if __name__ == '__main__':
@@ -32,7 +34,7 @@ if __name__ == '__main__':
 
 	# fred ファイルの読み込み
 	check_exist(args.fred, 2)
-	obj_fred = FredData(args.fred)
+	obj_fred = FileFred().read(args.fred)
 
 	# 構造の追加
 	cnt_total = 0
@@ -45,7 +47,7 @@ if __name__ == '__main__':
 		# 構造の追加
 		cnt = 0
 		for record in new_structure.output_fragmentdata(base_structure, args.flag_multi):
-			obj_fred.add_fragment(FragmentData(record))
+			obj_fred.add_fragment(FragmentData().create_from_string(record))
 			cnt += 1
 		cnt_total += cnt
 		sys.stderr.write("Replace {0} fragments with {1}\n".format(cnt, new_structure_file))
@@ -69,4 +71,4 @@ if __name__ == '__main__':
 
 	if args.flag_overwrite == False:
 		check_overwrite(args.output_file)
-	obj_fred.write_file(args.output_file)
+	obj_fred.write(args.output_file)

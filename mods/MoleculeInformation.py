@@ -4,6 +4,8 @@
 import sys
 import parmed
 
+from mods.FragmentData import FragmentData
+
 
 
 # =============== classes =============== #
@@ -124,11 +126,12 @@ class MoleculeInformation:
 			return [[obj_atom.xx, obj_atom.xy, obj_atom.xz] for obj_atom in self._obj_mol.atoms]
 
 
-	def output_fragmentdata(self, obj_base_molecule, flag_multi):
+	def output_fragmentdata(self, output_type, obj_base_molecule, flag_multi):
 		"""
 		Method to output fragment information
 
 		Args:
+			output_type (str): `text` or `object`
 			obj_base_molecule (MoleculeInformation object): MoleculeInformation object
 			flag_multi (bool): apply the same fragmentation to multiple molecules
 
@@ -173,6 +176,12 @@ class MoleculeInformation:
 						sys.stderr.write("ERROR: wrong coordinates in MoleculeInformation.output_fragmentdata().\n")
 						sys.exit(1)
 
-		fragment_records = ["{0}|{1}|{2}|{3}".format(0, "ERR", "ERR", " ".join([str(x) for x in record])) for record in fragment_records]
+		if output_type == "text":
+			return ["{0}|{1}|{2}|{3}".format(0, "ERR", "ERR", " ".join([str(v) for v in record])) for record in fragment_records]
+		elif output_type == "object":
+			return [FragmentData().set_fragment_index(0).set_charge("ERR").set_bda("ERR").set_atoms(record) for record in fragment_records]
+		else:
+			sys.stderr.write("ERROR: undefined output_type in MoleculeInformation class.\n")
+			sys.exit(1)
 
 		return fragment_records

@@ -5,39 +5,12 @@ import sys, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 from mods.FragmentData import FragmentData
+from mods.func_string import split_n
 
 
 
 # =============== constant =============== #
 INDENT = "  "
-
-
-
-# =============== function =============== #
-def split_n(line, length):
-	"""
-	Function to split by n-chars
-
-	Args:
-		line (str): target string
-		length (int): split length
-
-	Returns:
-		list
-	"""
-	line = line.rstrip("\r\n")
-	datas = []
-	pos = 0
-	while pos + length <= len(line):
-		datas.append(line[pos : pos + length])
-		pos += length
-
-	if pos != len(line):
-		datas.append(line[pos:len(line)])
-
-	datas = list(map(lambda data:data.strip(), datas))
-
-	return datas
 
 
 
