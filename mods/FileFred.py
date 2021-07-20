@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import sys
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 import re
 import copy
 

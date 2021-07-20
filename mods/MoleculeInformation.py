@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
+import sys, signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 import parmed
 
 from mods.FragmentData import FragmentData
