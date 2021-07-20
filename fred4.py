@@ -136,6 +136,7 @@ if __name__ == '__main__':
 		parser_editfrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", help="fred file")
 		parser_editfrag.add_argument("-p", dest="STRUCTURE_FILE", metavar="STRUCTURE.pdb", required=True, help="system structure file")
 		parser_editfrag.add_argument("-n", dest="FRAGMENT_STRUCTURE_LIST", metavar="FRAGMENT_STRCUTURE.pdb", required=True, nargs="+", help="fragment structure file")
+		parser_editfrag.add_argument("-t", dest="TARGET_FRAGMENT_LIST", metavar="TARGET_FRAGMENT", nargs="+", help="fragment indexes to which fragmentation is applied (separate with white space or specify by `1,2,5-10`)")
 		parser_editfrag.add_argument("-m", dest="FLAG_MULTI", action="store_true", default=False, help="applying separation to other the same type residues")
 		parser_editfrag.add_argument("-c", dest="CONNECTION_LIST", metavar = "ATOM1-ATOM2", nargs = "+", required=True, help = "connection list described by Ambermask (Ex: :EG@C9-:EG@C10  34-25)")
 		parser_editfrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
@@ -218,6 +219,14 @@ if __name__ == '__main__':
 		# read .fred
 		obj_fred = FileFred().read(args.INPUT_FILE)
 
+		# create target fragment list
+		target_fragment_atoms = []
+		if args.TARGET_FRAGMENT_LIST is not None:
+			target_fragment = [[int(v)] if v.isdigit() else target_range(v, start=1) for v in args.TARGET_FRAGMENT_LIST]
+			target_fragment = [v2 for v1 in target_fragment for v2 in v1]
+			target_fragment = list(sorted(set(target_fragment)))
+			target_fragment_atoms = [set(v.atoms) for i, v in enumerate(obj_fred.fragments, 1) if i in target_fragment]
+
 		cnt_total = 0
 		for structure_idx, fragment_structure_file in enumerate(args.FRAGMENT_STRUCTURE_LIST):
 			# loop for new fragment structure
@@ -229,7 +238,9 @@ if __name__ == '__main__':
 			# change atom member in existing fragment
 			cnt = 0
 			for obj_fragment in fragment_structure.output_fragmentdata("object", base_structure, args.FLAG_MULTI):
-				obj_fred.add_fragment(obj_fragment)
+				atoms = set(obj_fragment.atoms)
+				if args.TARGET_FRAGMENT_LIST is None or any([len(v & atoms) for v in target_fragment_atoms]):
+					obj_fred.add_fragment(obj_fragment)
 				cnt += 1
 			cnt_total += cnt
 			sys.stderr.write("Replace {0} fragments with {1}\n".format(cnt, fragment_structure_file))
