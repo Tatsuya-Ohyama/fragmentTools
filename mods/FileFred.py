@@ -12,6 +12,7 @@ from mods.FragmentData import FragmentData
 # =============== variables =============== #
 RE_FRAGMENT = re.compile(r"^[\s\t]*\d+[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|[\s\t]*(?:(?:ERR)|(?:-?\d+))[\s\t]*|(?:[\s\t]*\d+)+")
 RE_CONNECTION = re.compile(r"^(?:[\s\t]*\d+){2}[\s\t]*$")
+RE_INT = re.compile(r"^-?\d+$")
 INDENT = "  "
 
 
@@ -195,9 +196,32 @@ class FileFred:
 					flag_read = 3
 
 				elif flag_read == 1 and RE_FRAGMENT.search(line_val):
-					obj_fragment = FragmentData().create_from_fred_line(line_val)
-					if obj_fragment.charge != "ERR":
-						self._charge += obj_fragment.charge
+					obj_fragment = FragmentData()
+					elems = line_val.strip().split("|")
+
+					# Fragment index
+					if not elems[0].isdigit():
+						elems[0] = 0
+					obj_fragment.set_fragment_index(int(elems[0]))
+
+					# Charge
+					if RE_INT.search(elems[1]):
+						elems[1] = int(elems[1])
+						self._charge += elems[1]
+					else:
+						elems[1] = "ERR"
+					obj_fragment.set_charge(elems[1])
+
+					# BDA
+					if RE_INT.search(elems[2]):
+						elems[2] = int(elems[2])
+					else:
+						elems[2] = "ERR"
+					obj_fragment.set_charge(elems[2])
+
+					# atoms
+					obj_fragment.set_atoms([int(v) for v in elems[3].split()])
+
 					self._fragments.append(obj_fragment)
 					self._n_atom += len(obj_fragment.atoms)
 

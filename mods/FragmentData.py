@@ -2,12 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import re
-
-
-
-# =============== variables =============== #
-RE_INT = re.compile(r"^-?\d+$")
 
 
 
@@ -96,33 +90,4 @@ class FragmentData:
 			self
 		"""
 		self._atoms = atoms
-		return self
-
-
-	def create_from_fred_line(self, line_val):
-		"""
-		Method to create fragment object from string of .fred file
-
-		Args:
-			line_val (str): string information (.fred format)
-
-		Returns:
-			self
-		"""
-		line_val = line_val.strip()
-		datas = [v.strip() for v in line_val.split("|")]
-		self._idx = int(datas[0])
-
-		if RE_INT.search(datas[1]):
-			self._charge = int(datas[1])
-		else:
-			self._charge = "ERR"
-
-		self._bda = 0
-		if RE_INT.search(datas[2]):
-			self._bda = int(datas[2])
-		else:
-			self._bda = "ERR"
-
-		self._atoms = sorted([int(x) for x in datas[3].split()])
 		return self
