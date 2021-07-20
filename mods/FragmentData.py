@@ -99,9 +99,9 @@ class FragmentData:
 		return self
 
 
-	def create_from_string(self, line_val):
+	def create_from_fred_line(self, line_val):
 		"""
-		Method to create fragment object from string
+		Method to create fragment object from string of .fred file
 
 		Args:
 			line_val (str): string information (.fred format)

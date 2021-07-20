@@ -195,7 +195,7 @@ class FileFred:
 					flag_read = 3
 
 				elif flag_read == 1 and RE_FRAGMENT.search(line_val):
-					obj_fragment = FragmentData().create_from_string(line_val)
+					obj_fragment = FragmentData().create_from_fred_line(line_val)
 					if obj_fragment.charge != "ERR":
 						self._charge += obj_fragment.charge
 					self._fragments.append(obj_fragment)
