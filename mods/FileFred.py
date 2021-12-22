@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
+import sys, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import re
@@ -18,6 +18,7 @@ RE_INT = re.compile(r"^-?\d+$")
 INDENT = "  "
 
 
+
 # =============== classes =============== #
 class FileFred:
 	""" fred File class """
@@ -25,7 +26,6 @@ class FileFred:
 		self._n_atom = 0
 		self._charge = 0
 		self._fragments = []
-		self._connection = []
 		self._parameters = {}
 
 
@@ -92,11 +92,10 @@ class FileFred:
 			]) for obj_fragment in self._fragments
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
-			"".join(
-				["{0:>8}".format(i) for i in connect]
-			) for connect in self._connection
+			"{0[0]:>8}{0[1]:>8}".format(connection)
+			for obj_fragment in [obj_fragment for obj_fragment in self._fragments if len(obj_fragment.get_connections()) != 0]
+			for connection in obj_fragment.get_connections()
 		]) + "\n"
-
 		return parameters
 
 
@@ -139,20 +138,6 @@ class FileFred:
 			self
 		"""
 		self._fragments = list_fragments
-		return self
-
-
-	def set_connections(self, list_connection):
-		"""
-		Method to set connection list
-
-		Args:
-			list_connection (list): connection list
-
-		Returns:
-			self
-		"""
-		self._connection = list_connection
 		return self
 
 
@@ -199,7 +184,7 @@ class FileFred:
 
 				elif flag_read == 1 and RE_FRAGMENT.search(line_val):
 					obj_fragment = FragmentData()
-					elems = line_val.strip().split("|")
+					elems = [v.strip() for v in line_val.strip().split("|")]
 
 					# Fragment index
 					if not elems[0].isdigit():
@@ -219,7 +204,7 @@ class FileFred:
 						elems[2] = int(elems[2])
 					else:
 						elems[2] = "ERR"
-					obj_fragment.set_charge(elems[2])
+					obj_fragment.set_bda(elems[2])
 
 					# atoms
 					obj_fragment.set_atoms([int(v) for v in elems[3].split()])
@@ -228,7 +213,12 @@ class FileFred:
 					self._n_atom += len(obj_fragment.atoms)
 
 				elif flag_read == 2 and RE_CONNECTION.search(line_val):
-					self._connection.append([int(x) for x in line_val.strip().split()])
+					# connection
+					atom_i, atom_j = [int(x) for x in line_val.strip().split(maxsplit=1)]
+					obj_fragment_i = [obj_fragment for obj_fragment in self._fragments if atom_i in obj_fragment.atoms][0]
+					obj_fragment_i.append_connection([atom_i, atom_j])
+					obj_fragment_j = [obj_fragment for obj_fragment in self._fragments if atom_j in obj_fragment.atoms][0]
+					obj_fragment_j.append_connection([atom_i, atom_j])
 
 				elif flag_read == 3:
 					line_orig = line_val
@@ -287,21 +277,17 @@ class FileFred:
 		return self
 
 
-	def add_connection(self, connection):
+	def append_connection(self, connection):
 		"""
-		Method to add fragment connection
+		Method to append fragment connection
 
 		Args:
-			connection (int or list): connection information
+			connection (list): connection information
 
 		Returns:
 			self
 		"""
-		if isinstance(connection, int):
-			for i in range(connection):
-				self._connection.append(["*", "*"])
-		elif isinstance(connection, list):
-			self._connection.append(connection)
+		self._connection.append(connection)
 		return self
 
 
@@ -318,20 +304,25 @@ class FileFred:
 		"""
 		tmp_fragments = sorted([[obj_fragment.min_index, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
 		self._fragments = [obj_fragment[1].set_fragment_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
-		tmp_connection_int = sorted([x for x in self._connection if isinstance(x[0], int)], key=lambda x : x[0])
-		tmp_connection_str = sorted([x for x in self._connection if isinstance(x[0], str)], key=lambda x : x[0])
-		self._connection = tmp_connection_int + tmp_connection_str
 
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
-			for idx, fragment in enumerate(self._fragments, 1):
-				fragment.set_fragment_index(idx)
-				obj_output.write("{0:>7} |{1:>6}  |{2:>3}  |{3}\n".format(fragment.fragment_index, fragment.charge, fragment.bda, " ".join(["{0:>8}".format(x) for x in fragment.atoms])))
+			for idx, obj_fragment in enumerate(self._fragments, 1):
+				obj_fragment.set_fragment_index(idx)
+				obj_output.write("{0:>7} |{1:>5}   |{2:>3}  | {3}\n".format(
+					obj_fragment.fragment_index,
+					obj_fragment.charge, obj_fragment.bda,
+					" ".join(["{0:>8}".format(x) for x in obj_fragment.atoms])
+				))
 			obj_output.write("\n")
 
 			obj_output.write("<< connections (ex. \"Next_fragment_atom   Prev_fragment_atom\") >>\n")
-			for connection in self._connection:
-				obj_output.write("{0}\n".format(" ".join(["{0:>9}".format(x) for x in connection])))
+			for obj_fragment in self._fragments:
+				list_connections = obj_fragment.get_connections()
+				if len(list_connections) == 0:
+					continue
+				for connection in list_connections:
+					obj_output.write("{0[0]:>9} {0[1]:>9}\n".format(connection))
 			obj_output.write("\n")
 
 			obj_output.write("===============< namelist >===============\n")

@@ -100,7 +100,6 @@ class FileAJF:
 
 		Returns:
 			list: fragment object list
-			list: connection list
 		"""
 		# get number of atoms
 		if pdb_file is None:
@@ -129,7 +128,6 @@ class FileAJF:
 			sys.exit(1)
 
 		list_fragments = []
-		list_connections = []
 		fragment_idx_start = 0
 		n_atom_curr = 0
 		atom_idx = 0
@@ -233,9 +231,12 @@ class FileAJF:
 
 			elif n_step == 4:
 				# connection information
-				list_connections.append(datas)
+				obj_fragment_i = [obj_fragment for obj_fragment in list_fragments if datas[0] in obj_fragment.atoms][0]
+				obj_fragment_i.append_connection(datas)
+				obj_fragment_j = [obj_fragment for obj_fragment in list_fragments if datas[1] in obj_fragment.atoms][0]
+				obj_fragment_j.append_connection(datas)
 
-		return list_fragments, list_connections
+		return list_fragments
 
 
 	def parameter_list(self, omit_fragment=False):

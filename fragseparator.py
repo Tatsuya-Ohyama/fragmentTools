@@ -9,8 +9,11 @@ fred ファイルを元に、各フラグの PDB ファイルを生成するプ�
 import sys, os, re, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-from classes.func_prompt_io import *
 import argparse
+
+from mods.func_prompt_io import *
+
+
 
 # =============== functions =============== #
 

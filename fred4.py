@@ -21,8 +21,10 @@ from mods.func_string import target_range
 
 
 
-# =============== common variables =============== #
-# general
+# =============== constant =============== #
+PROGRAM_ROOT = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
+DEFAULT_AJF_TEMPLATE = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.templ")
+
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
 RE_DIGIT = re.compile(r"[\d\s]+")
@@ -156,14 +158,13 @@ if __name__ == '__main__':
 		# read .ajf file
 		obj_ajf = FileAJF()
 		obj_ajf.read(args.INPUT_FILE)
-		list_fragments, list_connections = obj_ajf.create_fragment_objects(args.PDB_FILE)
+		list_fragments = obj_ajf.create_fragment_objects(args.PDB_FILE)
 
 		# convert .fred file
 		obj_fred = FileFred()
 		obj_fred.set_n_atom(sum([len(v.atoms) for v in list_fragments]))
 		obj_fred.set_charge(sum([v.charge for v in list_fragments]))
 		obj_fred.set_fragments(list_fragments)
-		obj_fred.set_connections(list_connections)
 		obj_fred.set_parameters(obj_ajf.parameters)
 
 		if args.FLAG_OVERWRITE == False:
@@ -195,6 +196,8 @@ if __name__ == '__main__':
 		obj_ajf.set_parameters(obj_fred.complete_parameters)
 
 		file_reference = obj_fred.parameters["&CNTRL"]["ReadGeom"]
+		file_reference = RE_QUOTE_H.sub("", file_reference)
+		file_reference = RE_QUOTE_T.sub("", file_reference)
 		if args.PDB_FILE is not None:
 			file_reference = args.PDB_FILE
 		check_electrons(obj_fred.fragments, file_reference)
@@ -250,12 +253,12 @@ if __name__ == '__main__':
 			atom1, atom2 = str_connection.split("-", maxsplit=1)
 			if RE_CONNECT.search(str_connection):
 				# direct format of connection (atom indexes)
-				obj_fred.add_connection([atom1, atom2])
+				obj_fred.append_connection([atom1, atom2])
 			else:
 				mask_list1 = base_structure.convert_number(atom1)
 				mask_list2 = base_structure.convert_number(atom2)
 				for mask1, mask2 in zip(mask_list1, mask_list2):
-					obj_fred.add_connection([mask1, mask2])
+					obj_fred.append_connection([mask1, mask2])
 
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)
