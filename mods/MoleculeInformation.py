@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
+import sys, signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 import parmed
+
+from mods.FragmentData import FragmentData
+
+
 
 # =============== classes =============== #
 class MoleculeInformation:
-	""" 分子構造のクラス """
+	""" Molecular structure class """
 	def __init__(self, input_file):
 		# member
 		self._obj_mol = None
@@ -16,14 +22,28 @@ class MoleculeInformation:
 
 
 	def _load_file(self, input_file):
-		""" ファイルを読み込むメソッド """
+		"""
+		Method to read file
+
+		Args:
+			input_file (str): molecular file
+		"""
 		self._obj_mol = parmed.load_file(input_file)
+		return self
 
 
-	def get_info(self, data_type = None, idx = None):
-		""" 原子情報を返すメソッド """
+	def get_info(self, data_type=None, idx=None):
+		"""
+		Method to return atomic information
+
+		Args:
+			data_type (str, optional): `residue_name`, `residue_idx`, `atom_name` or `atom_idx` (Default: None)
+			idx (int, optional): target index (Default: None)
+
+		Returns:
+			list
+		"""
 		if data_type == "residue_name":
-			# 残基名を返す
 			if idx is not None:
 				try:
 					return self._obj_mol.atoms[idx].residue.name
@@ -34,7 +54,6 @@ class MoleculeInformation:
 				return [obj_atom.residue.name for obj_atom in self._obj_mol.atoms]
 
 		elif data_type == "residue_idx":
-			# 残基インデックスを返す
 			if idx is not None:
 				try:
 					return self._obj_mol.atoms[idx].residue.number
@@ -76,13 +95,29 @@ class MoleculeInformation:
 
 
 	def convert_number(self, mask):
-		""" マスクを原子順序番号に変換するメソッド """
+		"""
+		Method to convert Ambermask to atom index
+
+		Args:
+			mask (str): Ambermask
+
+		Returns:
+			list
+		"""
 		mask = parmed.amber.AmberMask(self._obj_mol, mask)
 		return [self.get_info("atom_idx", idx) for idx in mask.Selected()]
 
 
-	def get_coord(self, idx = None):
-		""" 座標を出力するメソッド """
+	def get_coord(self, idx=None):
+		"""
+		Method to return coordinates
+
+		Args:
+			idx (int, optional): atom index (Default: None)
+
+		Returns:
+			list
+		"""
 		if idx is not None:
 			try:
 				return [[obj_atom.xx, obj_atom.xy, obj_atom.xz] for obj_atom in self._obj_mol.atoms[idx]]
@@ -93,24 +128,34 @@ class MoleculeInformation:
 			return [[obj_atom.xx, obj_atom.xy, obj_atom.xz] for obj_atom in self._obj_mol.atoms]
 
 
-	def output_fragmentdata(self, obj_base_molecule, flag_multi):
-		""" 該当するフラグメントを出力するメソッド """
+	def output_fragmentdata(self, output_type, obj_base_molecule, flag_multi):
+		"""
+		Method to output fragment information
+
+		Args:
+			output_type (str): `text` or `object`
+			obj_base_molecule (MoleculeInformation object): MoleculeInformation object
+			flag_multi (bool): apply the same fragmentation to multiple molecules
+
+		Returns:
+			list
+		"""
 		fragment_records = [[]]
 
 		if flag_multi:
-			# 同じ種類の残基の複数のフラグメントに適用する場合
+			# apply the same fragmentation to multiple molecules
 			mol_info = [list(x) for x in list(zip(self.get_info("residue_name"), self.get_info("atom_name")))]
 			len_atom = len(self.get_info("atom_name"))
 			check_list = [False] * len_atom
 
 			for info in obj_base_molecule.get_info():
-				# 全体構造の情報で回す
+				# loop for whole structure
 				if [info[0], info[2]] in mol_info:
-					# 残基名と原子名のリストの情報が含まれる場合
+					# when contain residue name and atom name
 					match_idx = mol_info.index([info[0], info[2]])
 
 					if check_list[match_idx]:
-						# 前回と同じ原子を処理している場合、新たなフラグメントリストを作成する
+						# when dealing with the same atoms as before, create new fragment list
 						fragment_records.append([])
 						check_list = [False] * len_atom
 
@@ -118,26 +163,27 @@ class MoleculeInformation:
 					check_list[match_idx] = True
 
 		else:
-			# 単一のフラグメントに適用する場合、座標でマッチさせる
+			# when apply as single fragment, match by coordinates
 			coords_base = obj_base_molecule.get_coord()
 
 			for array_idx, coords in enumerate(self.get_coord()):
-				# 自身の座標とそのインデックスで回す
+				# loop for coordinates and index
 				if coords in coords_base:
-					# 座標でマッチした場合、マッチしたインデックスを取得する
+					# when match with coordinates, get index
 					match_idx = coords_base.index(coords)
 					if self.get_info("atom_name", array_idx) == obj_base_molecule.get_info("atom_name", match_idx):
-						# 原子名でもマッチを確認し、フラグメント情報に追加する
+						# also check for atomic name, and add fragment information
 						fragment_records[-1].append(obj_base_molecule.get_info("atom_idx", match_idx))
 					else:
 						sys.stderr.write("ERROR: wrong coordinates in MoleculeInformation.output_fragmentdata().\n")
 						sys.exit(1)
 
-		fragment_records = ["{0}|{1}|{2}|{3}".format(0, "ERR", "ERR", " ".join([str(x) for x in record])) for record in fragment_records]
+		if output_type == "text":
+			return ["{0}|{1}|{2}|{3}".format(0, "ERR", "ERR", " ".join([str(v) for v in record])) for record in fragment_records]
+		elif output_type == "object":
+			return [FragmentData().set_fragment_index(0).set_charge("ERR").set_bda("ERR").set_atoms(record) for record in fragment_records]
+		else:
+			sys.stderr.write("ERROR: undefined output_type in MoleculeInformation class.\n")
+			sys.exit(1)
 
 		return fragment_records
-
-
-# =============== main =============== #
-# if __name__ == '__main__':
-# 	main()

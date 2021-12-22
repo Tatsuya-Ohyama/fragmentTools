@@ -5,11 +5,14 @@
 autofrag
 """
 
-import sys, os, re, signal
+import sys, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+import os
+import re
 import argparse
-from classes.func_prompt_io import *
+from mods.func_prompt_io import *
+
 
 
 # =============== class =============== #
