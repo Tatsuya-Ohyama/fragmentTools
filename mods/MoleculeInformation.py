@@ -16,9 +16,19 @@ class MoleculeInformation:
 	def __init__(self, input_file):
 		# member
 		self._obj_mol = None
+		self._filename = None
 
 		# initiation
 		self._load_file(input_file)
+
+
+	@property
+	def obj_mol(self):
+		return self._obj_mol
+
+	@property
+	def filename(self):
+		return self._filename
 
 
 	def _load_file(self, input_file):
@@ -28,6 +38,7 @@ class MoleculeInformation:
 		Args:
 			input_file (str): molecular file
 		"""
+		self._filename = input_file
 		self._obj_mol = parmed.load_file(input_file)
 		return self
 
@@ -175,13 +186,13 @@ class MoleculeInformation:
 						# also check for atomic name, and add fragment information
 						fragment_records[-1].append(obj_base_molecule.get_info("atom_idx", match_idx))
 					else:
-						sys.stderr.write("ERROR: wrong coordinates in MoleculeInformation.output_fragmentdata().\n")
+						sys.stderr.write("ERROR: wrong coordinates in MoleculeInformation.output_fragmentdata(). Perhaps mismatched atom names in `{0}`.\n".format(self._filename))
 						sys.exit(1)
 
 		if output_type == "text":
 			return ["{0}|{1}|{2}|{3}".format(0, "ERR", "ERR", " ".join([str(v) for v in record])) for record in fragment_records]
 		elif output_type == "object":
-			return [FragmentData().set_fragment_index(0).set_charge("ERR").set_bda("ERR").set_atoms(record) for record in fragment_records]
+			return [FragmentData().set_fragment_index(0).set_charge(None).set_bda(None).set_atoms(record) for record in fragment_records]
 		else:
 			sys.stderr.write("ERROR: undefined output_type in MoleculeInformation class.\n")
 			sys.exit(1)

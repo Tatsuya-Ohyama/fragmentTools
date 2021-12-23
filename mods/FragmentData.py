@@ -11,7 +11,7 @@ class FragmentData:
 	def __init__(self):
 		# member
 		self._idx = None
-		self._charge = 0
+		self._charge = None
 		self._bda = None
 		self._atoms = []
 		self._connections = []
@@ -29,7 +29,8 @@ class FragmentData:
 	def bda(self):
 		if self._bda is not None and len(self._connections) != 0:
 			if not (self._bda == len([v for v in self._connections if v[1] in self._atoms])):
-				print("BDA: conflict (Fragment {0})".format(self._idx))
+				sys.stderr.write("WARNING: BDA in Fragment {0} conflicts between given BDA and connection.\n".format(self._idx))
+				sys.stderr.write("         BDA: {0} / connection: {1} ({2})\n".format(self._bda, len(self._connections), ", ".join(["{0[0]}-{0[1]}".format(v) for v in self._connections])))
 
 		if self._bda is not None:
 			return self._bda
@@ -134,6 +135,7 @@ class FragmentData:
 			self
 		"""
 		self._connections.append(connection)
+		self._connections = list(map(list, set(map(tuple, self._connections))))
 		return self
 
 

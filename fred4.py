@@ -73,12 +73,16 @@ def check_electrons(list_obj_fragments, pdb_file):
 		for atom_i in obj_fragment.atoms:
 			try:
 				electron_atom = ATOM_ELECTRON[element_table[atom_i]]
+				# print(electron_atom)
 				electron_fragment += electron_atom
 			except ValueError:
 				sys.stderr.write("ERROR: atom index `{0}` is not found in list.\n".format(atom_i))
 				sys.exit(1)
+		# print(electron_fragment)
 
 		electron_fragment += (-1 * obj_fragment.charge)
+		# print(electron_fragment)
+		# sys.stdin.readline()
 		if electron_fragment % 2 != 0:
 			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n")
 			sys.stderr.write("       The number of electrons in fragment No. {0} is {1}.\n".format(fragment_idx, electron_fragment))
@@ -250,15 +254,21 @@ if __name__ == '__main__':
 
 		# add connection
 		for str_connection in args.CONNECTION_LIST:
-			atom1, atom2 = str_connection.split("-", maxsplit=1)
-			if RE_CONNECT.search(str_connection):
-				# direct format of connection (atom indexes)
-				obj_fred.append_connection([atom1, atom2])
+			pair = str_connection.split("-", maxsplit=1)
+			mask_list1 = []
+			mask_list2 = []
+			if not all([v.isdigit() for v in pair]):
+				mask_list1 = base_structure.convert_number(pair[0])
+				mask_list2 = base_structure.convert_number(pair[1])
 			else:
-				mask_list1 = base_structure.convert_number(atom1)
-				mask_list2 = base_structure.convert_number(atom2)
-				for mask1, mask2 in zip(mask_list1, mask_list2):
-					obj_fred.append_connection([mask1, mask2])
+				mask_list1 = [pair[0]]
+				mask_list2 = [pair[1]]
+
+			for atom_idx1, atom_idx2 in zip(mask_list1, mask_list2):
+				for obj_fragment in obj_fred.fragments:
+					if atom_idx2 in obj_fragment.atoms:
+						obj_fragment.append_connection([atom_idx1, atom_idx2])
+						break
 
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)

@@ -8,18 +8,12 @@ editfrag.py
 import sys, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-import os
-import re
 import argparse
+
 from mods.func_prompt_io import check_exist, check_overwrite
+from mods.func_string import target_range
 from mods.MoleculeInformation import MoleculeInformation
-from mods.FragmentData import FragmentData
 from mods.FileFred import FileFred
-
-
-
-# =============== constant =============== #
-RE_CONNECT = re.compile(r'^\d+-\d+$')
 
 
 
@@ -32,7 +26,7 @@ if __name__ == '__main__':
 	parser.add_argument("-n", dest="FRAGMENT_STRUCTURE_LIST", metavar="FRAGMENT_STRCUTURE.pdb", required=True, nargs="+", help="fragment structure file")
 	parser.add_argument("-t", dest="TARGET_FRAGMENT_LIST", metavar="TARGET_FRAGMENT", nargs="+", help="fragment indexes to which fragmentation is applied (separate with white space or specify by `1,2,5-10`)")
 	parser.add_argument("-m", dest="FLAG_MULTI", action="store_true", default=False, help="applying separation to other the same type residues")
-	parser.add_argument("-c", dest="CONNECTION_LIST", metavar = "ATOM1-ATOM2", nargs = "+", required=True, help = "connection list described by Ambermask (Ex: :EG@C9-:EG@C10  34-25)")
+	parser.add_argument("-c", dest="CONNECTION_LIST", metavar = "ATOM1-ATOM2", nargs = "+", required=True, help = "Ambermask or atom index for connected atom pair list (Ex: :EG@C9-:EG@C10  34-25)")
 	parser.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 	args = parser.parse_args()
@@ -54,6 +48,7 @@ if __name__ == '__main__':
 		target_fragment_atoms = [set(v.atoms) for i, v in enumerate(obj_fred.fragments, 1) if i in target_fragment]
 
 	cnt_total = 0
+	fragment_index = obj_fred.fragments[-1].fragment_index + 1
 	for structure_idx, fragment_structure_file in enumerate(args.FRAGMENT_STRUCTURE_LIST):
 		# loop for new fragment structure
 
@@ -63,25 +58,35 @@ if __name__ == '__main__':
 
 		# change atom member in existing fragment
 		cnt = 0
+		new_fragment = []
 		for obj_fragment in fragment_structure.output_fragmentdata("object", base_structure, args.FLAG_MULTI):
 			atoms = set(obj_fragment.atoms)
 			if args.TARGET_FRAGMENT_LIST is None or any([len(v & atoms) for v in target_fragment_atoms]):
+				obj_fragment.set_fragment_index(fragment_index)
+				fragment_index += 1
 				obj_fred.add_fragment(obj_fragment)
+				new_fragment.append(obj_fragment.fragment_index)
 			cnt += 1
 		cnt_total += cnt
-		sys.stderr.write("Replace {0} fragments with {1}\n".format(cnt, fragment_structure_file))
+		sys.stderr.write("Replace {0} fragments with {1} => Fragment {2}\n".format(cnt, fragment_structure_file, ", ".join([str(v) for v in new_fragment])))
 
 	# add connection
 	for str_connection in args.CONNECTION_LIST:
-		atom1, atom2 = str_connection.split("-", maxsplit=1)
-		if RE_CONNECT.search(str_connection):
-			# direct format of connection (atom indexes)
-			obj_fred.add_connection([atom1, atom2])
+		pair = str_connection.split("-", maxsplit=1)
+		if all([v.isdigit() for v in pair]):
+			pair = [int(v) for v in pair]
 		else:
-			mask_list1 = base_structure.convert_number(atom1)
-			mask_list2 = base_structure.convert_number(atom2)
-			for mask1, mask2 in zip(mask_list1, mask_list2):
-				obj_fred.add_connection([mask1, mask2])
+			list_atom1 = base_structure.convert_number(pair[0])
+			list_atom2 = base_structure.convert_number(pair[1])
+			if len(list_atom1) != 1 or len(list_atom2) != 1:
+				sys.stderr.write("ERROR: An atomic group cannot be specified as a connection pair. `{0}`\n".format(str_connection))
+				sys.exit()
+			pair = [int(list_atom1[0]), int(list_atom2[0])]
+
+		for obj_fragment in obj_fred.fragments:
+			if pair[1] in obj_fragment.atoms:
+				obj_fragment.append_connection(pair)
+				break
 
 	if args.FLAG_OVERWRITE == False:
 		check_overwrite(args.OUTPUT_FILE)
