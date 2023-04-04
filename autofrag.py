@@ -11,18 +11,42 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 import os
 import re
 import argparse
-from mods.func_prompt_io import *
+from mods.func_prompt_io import check_exist, check_overwrite
+
+
+
+# =============== variables =============== #
+PROGRAM_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
+TEMPLATE_FILES = [
+	os.path.join(PROGRAM_DIR, "template", "autofrag_3.templ"),
+	os.path.join(PROGRAM_DIR, "template", "autofrag_5.templ"),
+	os.path.join(PROGRAM_DIR, "template", "autofrag_m.templ")
+]
+RESIDUE_TYPES = {
+	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"],
+	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "A5", "C5", "G5", "U5", "A", "C", "G", "U", "A3", "C3", "G3", "U3", "DNA_base"],
+	"Water": ["SOL", "WAT", "HOH"],
+	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn", "CAL", "ZIN"]
+}
+RE_SIGN = re.compile(r"[-\+\*\'\"]")
+RE_HEAD = re.compile(r"^([\d'\s])")
+RE_TERMH1 = re.compile(r"H[53]T")
+RE_TERMH2 = re.compile(r"HO[53]")
+RE_PYRIMIDINE = re.compile(r'^\s*[RD][UTC][53]?\s*$')
+RE_PURINE = re.compile(r'^\s*[RD][GA][53]?\s*$')
+RE_5TERM = re.compile(r'^[RD][AGCTU]5$')
+RE_3TERM = re.compile(r'^[RD][AGCTU]3$')
 
 
 
 # =============== class =============== #
 class FragmentData:
-	def __init__(self, flag_sep = False):
+	def __init__(self, FLAG_SEP = False):
 		self.atom_idxs = {}
 		self.residue_name = ""
 		self.charge = 0
 		self.type = ""
-		self.flag_sep = flag_sep
+		self.FLAG_SEP = FLAG_SEP
 		self.shift_atoms = {}
 		self.sep_atoms = {}
 		self.connectivity = [-1, -1]
@@ -33,7 +57,7 @@ class FragmentData:
 	def append_data(self, atom_order, atom_type, residue_name):
 		""" データを追加する関数 """
 		self.atom_idxs[atom_order] = atom_type.replace("+", "").replace("-", "")
-		if self.atom_idxs[atom_order] in residue_types["Ion"] and ("+" in residue_name or "-" in residue_name):
+		if self.atom_idxs[atom_order] in RESIDUE_TYPES["Ion"] and ("+" in residue_name or "-" in residue_name):
 			residue_name = residue_name.replace("+", "").replace("-", "")
 		self.residue_name = residue_name
 
@@ -51,14 +75,14 @@ class FragmentData:
 					self.charge = 0
 
 			elif self.type == "NucleicAcid":
-				if re_5term.search(self.residue_name):
-					if self.flag_sep:
+				if RE_5TERM.search(self.residue_name):
+					if self.FLAG_SEP:
 						# 塩基と分けている場合
 						self.charge = 1
 					else:
 						self.charge = 0
-				elif re_3term.search(self.residue_name):
-					if self.flag_sep:
+				elif RE_3TERM.search(self.residue_name):
+					if self.FLAG_SEP:
 						# 塩基と分けている場合
 						self.charge = 0
 					else:
@@ -92,14 +116,14 @@ class FragmentData:
 			elif self.type == "NucleicAcid":
 				# 核酸の切り方
 				ref_atom_idx = self.atom_idxs.copy()
-				if self.flag_sep:
+				if self.FLAG_SEP:
 					# 塩基原子を sep_atoms に移動させる
 					for key, value in ref_atom_idx.items():
-						if not ("'" in value or "P" in value or re_termH1.match(value) or re_termH2.match(value)):
+						if not ("'" in value or "P" in value or RE_TERMH1.match(value) or RE_TERMH2.match(value)):
 							# 接続情報追加
-							if re_pyrimidine.match(self.residue_name) and value == "N1":
+							if RE_PYRIMIDINE.match(self.residue_name) and value == "N1":
 								self.sep_connectivity[1] = key
-							elif re_purine.match(self.residue_name) and value == "N9":
+							elif RE_PURINE.match(self.residue_name) and value == "N9":
 								self.sep_connectivity[1] = key
 							# 原子の移動
 							self.sep_atoms[key] = value
@@ -126,71 +150,57 @@ class FragmentData:
 				# 接続相手がある場合
 				self.bda = 1
 
-			if self.flag_sep and -1 not in self.sep_connectivity:
+			if self.FLAG_SEP and -1 not in self.sep_connectivity:
 				self.sep_bda = 1
 
 
 
-
-# =============== variables =============== #
-residue_types = {
-	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"],
-	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "A5", "C5", "G5", "U5", "A", "C", "G", "U", "A3", "C3", "G3", "U3", "DNA_base"],
-	"Water": ["SOL", "WAT", "HOH"],
-	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn", "CAL", "ZIN"]
-}
-re_sign = re.compile(r"[-\+\*\'\"]")
-re_head = re.compile(r"^([\d'\s])")
-re_ter = re.compile(r"^TER")
-re_termH1 = re.compile(r"H[53]T")
-re_termH2 = re.compile(r"HO[53]")
-re_pyrimidine = re.compile(r'^\s*[RD][UTC][53]?\s*$')
-re_purine = re.compile(r'^\s*[RD][GA][53]?\s*$')
-re_5term = re.compile(r'^[RD][AGCTU]5$')
-re_3term = re.compile(r'^[RD][AGCTU]3$')
-program_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
-template_files = [
-	os.path.join(program_dir, "template", "autofrag_3.templ"),
-	os.path.join(program_dir, "template", "autofrag_5.templ"),
-	os.path.join(program_dir, "template", "autofrag_m.templ")
-]
-
 # =============== functions =============== #
 def check_residue(residue_name):
-	""" 残基の種類を調べる関数 """
-	for key, value in residue_types.items():
+	"""
+	Function to determine residue type
+
+	Args:
+		residue_name (str): residue name
+
+	Returns:
+		str: residue type
+	"""
+	for key, value in RESIDUE_TYPES.items():
 		if residue_name in value:
 			return key
 	return "Other"
 
+
+
 # =============== main =============== #
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description = "autofrag", formatter_class=argparse.RawTextHelpFormatter)
-	parser.add_argument("-i", dest = "input", metavar = "INPUT.pdb", required = True, help = "Input file")
-	parser.add_argument("-o", dest = "output", metavar = "OUTPUT.fred", required = True, help = "Output file")
-	parser.add_argument("-S", "--separate", dest = "flag_sep", action = "store_true", default = False, help = "Nucleotide was devided into sugar+phosphate group and base")
-	parser.add_argument("-V", "--version", dest = "version", metavar = "version", required = True, help = "ajf version (3: ABINIT-MP 3, 5: ABINIT-MP 5 or later, m: mizuho ABINIT-MP) or template file path")
-	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
+	parser = argparse.ArgumentParser(description="autofrag", formatter_class=argparse.RawTextHelpFormatter)
+	parser.add_argument("-i", dest="INPUT", metavar="INPUT.pdb", required=True, help="Input file")
+	parser.add_argument("-o", dest="OUTPUT", metavar="OUTPUT.fred", required=True, help="Output file")
+	parser.add_argument("-S", "--separate", dest="FLAG_SEP", action="store_true", default=False, help="Nucleotide was devided into sugar+phosphate group and base")
+	parser.add_argument("-V", "--version", dest="VERSION", metavar="version", required=True, help="ajf version (3: ABINIT-MP 3, 5: ABINIT-MP 5 or later, m: mizuho ABINIT-MP) or template file path")
+	parser.add_argument("-O", dest="flag_overwrite", action="store_true", default=False, help="overwrite forcibly")
 	args = parser.parse_args()
 
-	check_exist(args.input, 2)
+	check_exist(args.INPUT, 2)
 
 	template_file = ""
-	if args.version == "3":
-		template_file = template_files[0]
-	elif args.version == "5":
-		template_file = template_files[1]
-	elif args.version == "m":
-		template_file = template_files[2]
+	if args.VERSION == "3":
+		template_file = TEMPLATE_FILES[0]
+	elif args.VERSION == "5":
+		template_file = TEMPLATE_FILES[1]
+	elif args.VERSION == "m":
+		template_file = TEMPLATE_FILES[2]
 	else:
-		template_file = args.version
+		template_file = args.VERSION
 	check_exist(template_file, 2)
 
 	option_nuc = "+base"
-	if args.flag_sep:
+	if args.FLAG_SEP:
 		option_nuc = "/base"
 
-	title = args.input.replace(".pdb", "")
+	title = args.INPUT.replace(".pdb", "")
 	total_atom = 0
 	fragments = []
 	fragment = None
@@ -198,7 +208,7 @@ if __name__ == '__main__':
 	idx = -1
 
 	# ファイル読み込み
-	with open(args.input, "r") as obj_input:
+	with open(args.INPUT, "r") as obj_input:
 		connectivity = [[], []]
 		for line in obj_input:
 			line = line.rstrip("\n")
@@ -219,20 +229,20 @@ if __name__ == '__main__':
 
 				# アトムタイプ取得
 				atom_type = line[12:16].strip().replace("*", "'")
-				redb = re_head.search(atom_type)
+				redb = RE_HEAD.search(atom_type)
 				if redb:
-					atom_type = re_head.sub("", atom_type) + redb.group()
+					atom_type = RE_HEAD.sub("", atom_type) + redb.group()
 
 				# 残基情報取得
 				residue_info = line[17:26]
-				residue_name = re_sign.sub("", line[17:20].strip())
+				residue_name = RE_SIGN.sub("", line[17:20].strip())
 
 				if residue_info != residue_info_old:
 					# 前回の残基と異なる場合、最終処理とフラグメントの新規作成
 					if fragment is not None:
 						fragments[idx].terminate()
 					idx += 1
-					fragments.append(FragmentData(args.flag_sep))
+					fragments.append(FragmentData(args.FLAG_SEP))
 					fragments[idx].append_data(atom_order, atom_type, residue_name)
 					residue_info_old = residue_info
 				else:
@@ -243,7 +253,7 @@ if __name__ == '__main__':
 				# TER の場合
 				if fragments[-1].type != "TER":
 					# TER の重複でない場合
-					fragments.append(FragmentData(args.flag_sep))
+					fragments.append(FragmentData(args.FLAG_SEP))
 					idx += 1
 					fragments[idx].type = "TER"
 
@@ -295,7 +305,7 @@ if __name__ == '__main__':
 
 		if fragments[idx].type == "NucleicAcid" and len(fragments[idx].sep_atoms) != 0:
 			# 塩基と分割する場合、塩基のフラグメントを追加
-			fragment = FragmentData(args.flag_sep)
+			fragment = FragmentData(args.FLAG_SEP)
 			fragment.atom_idxs = new_fragments[new_idx].sep_atoms
 			new_fragments[new_idx].sep_atoms = {}
 			fragment.connectivity = new_fragments[new_idx].sep_connectivity
@@ -319,10 +329,10 @@ if __name__ == '__main__':
 
 	# 出力
 	if args.flag_overwrite == False:
-		check_overwrite(args.output)
+		check_overwrite(args.OUTPUT)
 
 	cnt_fragment = 0
-	with open(args.output, "w") as obj_output:
+	with open(args.OUTPUT, "w") as obj_output:
 		obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
 		for idx, obj in enumerate(fragments):
 			if obj.type != "TER":
@@ -350,7 +360,7 @@ if __name__ == '__main__':
 				if "$total_charge" in line:
 					line = line.replace("$total_charge", str(total_charge))
 				if "$in" in line:
-					line = line.replace("$in", args.input)
+					line = line.replace("$in", args.INPUT)
 				if "$cpf" in line:
 					line = line.replace("$cpf", title + ".cpf")
 				if "$option_nuc" in line:
