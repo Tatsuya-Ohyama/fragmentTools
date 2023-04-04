@@ -32,10 +32,10 @@ RE_SIGN = re.compile(r"[-\+\*\'\"]")
 RE_HEAD = re.compile(r"^([\d'\s])")
 RE_TERMH1 = re.compile(r"H[53]T")
 RE_TERMH2 = re.compile(r"HO[53]")
-RE_PYRIMIDINE = re.compile(r'^\s*[RD][UTC][53]?\s*$')
-RE_PURINE = re.compile(r'^\s*[RD][GA][53]?\s*$')
-RE_5TERM = re.compile(r'^[RD][AGCTU]5$')
-RE_3TERM = re.compile(r'^[RD][AGCTU]3$')
+RE_PYRIMIDINE = re.compile(r'^\s*[RD]?[UTC][53]?\s*$')
+RE_PURINE = re.compile(r'^\s*[RD]?[GA][53]?\s*$')
+RE_5TERM = re.compile(r'^[RD]?[AGCTU]5$')
+RE_3TERM = re.compile(r'^[RD]?[AGCTU]3$')
 
 
 
