@@ -11,162 +11,158 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 import os
 import re
 import argparse
-from mods.func_prompt_io import check_exist, check_overwrite
-
-
-
-# =============== variables =============== #
-PROGRAM_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
-TEMPLATE_FILES = [
-	os.path.join(PROGRAM_DIR, "template", "autofrag_3.templ"),
-	os.path.join(PROGRAM_DIR, "template", "autofrag_5.templ"),
-	os.path.join(PROGRAM_DIR, "template", "autofrag_m.templ")
-]
-RESIDUE_TYPES = {
-	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"],
-	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "A5", "C5", "G5", "U5", "A", "C", "G", "U", "A3", "C3", "G3", "U3", "DNA_base"],
-	"Water": ["SOL", "WAT", "HOH"],
-	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn", "CAL", "ZIN"]
-}
-RE_SIGN = re.compile(r"[-\+\*\'\"]")
-RE_HEAD = re.compile(r"^([\d'\s])")
-RE_TERMH1 = re.compile(r"H[53]T")
-RE_TERMH2 = re.compile(r"HO[53]")
-RE_PYRIMIDINE = re.compile(r'^\s*[RD]?[UTC][53]?\s*$')
-RE_PURINE = re.compile(r'^\s*[RD]?[GA][53]?\s*$')
-RE_5TERM = re.compile(r'^[RD]?[AGCTU]5$')
-RE_3TERM = re.compile(r'^[RD]?[AGCTU]3$')
+from mods.func_prompt_io import *
 
 
 
 # =============== class =============== #
 class FragmentData:
-	def __init__(self, FLAG_SEP = False):
-		self.atom_idxs = {}
-		self.residue_name = ""
-		self.charge = 0
-		self.type = ""
-		self.FLAG_SEP = FLAG_SEP
-		self.shift_atoms = {}
-		self.sep_atoms = {}
-		self.connectivity = [-1, -1]
-		self.sep_connectivity = [-1, -1]
-		self.bda = 0
-		self.sep_bda = 0
+	def __init__(self, flag_sep=False):
+		self._atom_idxs = {}
+		self._residue_name = ""
+		self._charge = 0
+		self._type = ""
+		self._flag_sep = flag_sep
+		self._shift_atoms = {}
+		self._sep_atoms = {}
+		self._connectivity = [-1, -1]
+		self._sep_connectivity = [-1, -1]
+		self._bda = 0
+		self._sep_bda = 0
+
 
 	def append_data(self, atom_order, atom_type, residue_name):
 		""" データを追加する関数 """
-		self.atom_idxs[atom_order] = atom_type.replace("+", "").replace("-", "")
-		if self.atom_idxs[atom_order] in RESIDUE_TYPES["Ion"] and ("+" in residue_name or "-" in residue_name):
+		self._atom_idxs[atom_order] = atom_type.replace("+", "").replace("-", "")
+		if self._atom_idxs[atom_order] in residue_types["Ion"] and ("+" in residue_name or "-" in residue_name):
 			residue_name = residue_name.replace("+", "").replace("-", "")
-		self.residue_name = residue_name
+		self._residue_name = residue_name
+
 
 	def terminate(self):
 		""" 電荷などを計算する関数 """
-		if self.type != "TER":
-			self.type = check_residue(self.residue_name)
+		if self._type != "TER":
+			self._type = check_residue(self._residue_name)
 
-			if self.type == "AminoAcid":
-				if self.residue_name in ["LYS", "ARG", "HIP", "SYM", "ACE"]:
-					self.charge = 1
-				elif self.residue_name in ["ASP", "GLU", "NME"]:
-					self.charge = -1
-				elif self.residue_name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
-					self.charge = 0
+			if self._type == "AminoAcid":
+				if self._residue_name in ["LYS", "ARG", "HIP", "SYM", "ACE"]:
+					self._charge = 1
+				elif self._residue_name in ["ASP", "GLU", "NME"]:
+					self._charge = -1
+				elif self._residue_name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
+					self._charge = 0
 
-			elif self.type == "NucleicAcid":
-				if RE_5TERM.search(self.residue_name):
-					if self.FLAG_SEP:
+			elif self._type == "NucleicAcid":
+				if re_5term.search(self._residue_name):
+					if self._flag_sep:
 						# 塩基と分けている場合
-						self.charge = 1
+						self._charge = 1
 					else:
-						self.charge = 0
-				elif RE_3TERM.search(self.residue_name):
-					if self.FLAG_SEP:
+						self._charge = 0
+				elif re_3term.search(self._residue_name):
+					if self._flag_sep:
 						# 塩基と分けている場合
-						self.charge = 0
+						self._charge = 0
 					else:
-						self.charge = -1
+						self._charge = -1
 
-			elif self.residue_name in ["Na", "K"]:
-				self.charge = 1
-			elif self.residue_name in ["Zn", "Ca", "CAL", "ZIN"]:
-				self.charge = 2
-			elif self.type == "Water":
-				self.charge = 0
+			elif self._residue_name in ["Na", "K"]:
+				self._charge = 1
+			elif self._residue_name in ["Zn", "Ca", "CAL", "ZIN"]:
+				self._charge = 2
+			elif self._type == "Water":
+				self._charge = 0
 			else:
-				self.charge = "ERR"
-				self.bda = "ERR"
+				self._charge = "ERR"
+				self._bda = "ERR"
 
 			# BDA のため、フラグメント間で原子を移動させる準備 (他フラグメントに与える原子)
-			if self.type == "AminoAcid":
+			if self._type == "AminoAcid":
 				# アミノ酸の切り方
 				delete_key = []
-				for key, value in self.atom_idxs.items():
+				for key, value in self._atom_idxs.items():
 					if value in ["C", "O"]:
-						self.shift_atoms[key] = value
+						self._shift_atoms[key] = value
 						delete_key.append(key)
-						# del(self.atom_idxs[key])
+						# del(self._atom_idxs[key])
 						if value == "C":
-							self.connectivity[1] = key
+							self._connectivity[1] = key
 					if value == "CA":
-						self.connectivity[0] = key
-				self.atom_idxs = {k: v for k, v in self.atom_idxs.items() if k not in delete_key}
+						self._connectivity[0] = key
+				self._atom_idxs = {k: v for k, v in self._atom_idxs.items() if k not in delete_key}
 
-			elif self.type == "NucleicAcid":
+			elif self._type == "NucleicAcid":
 				# 核酸の切り方
-				ref_atom_idx = self.atom_idxs.copy()
-				if self.FLAG_SEP:
+				ref_atom_idx = self._atom_idxs.copy()
+				if self._flag_sep:
 					# 塩基原子を sep_atoms に移動させる
 					for key, value in ref_atom_idx.items():
-						if not ("'" in value or "P" in value or RE_TERMH1.match(value) or RE_TERMH2.match(value)):
+						if not ("'" in value or "P" in value or re_termH1.match(value) or re_termH2.match(value)):
 							# 接続情報追加
-							if RE_PYRIMIDINE.match(self.residue_name) and value == "N1":
-								self.sep_connectivity[1] = key
-							elif RE_PURINE.match(self.residue_name) and value == "N9":
-								self.sep_connectivity[1] = key
+							if re_pyrimidine.match(self._residue_name) and value == "N1":
+								self._sep_connectivity[1] = key
+							elif re_purine.match(self._residue_name) and value == "N9":
+								self._sep_connectivity[1] = key
 							# 原子の移動
-							self.sep_atoms[key] = value
-							del(self.atom_idxs[key])
+							self._sep_atoms[key] = value
+							del(self._atom_idxs[key])
 						elif value == "C1'":
 							# 接続情報追加
-							self.sep_connectivity[0] = key
+							self._sep_connectivity[0] = key
 
-				ref_atom_idx = self.atom_idxs.copy()
+				ref_atom_idx = self._atom_idxs.copy()
 				for key, value in ref_atom_idx.items():
 					# フラグメントで移動させる
-					if "5" not in self.residue_name and value in ["P", "O1P", "O2P", "OP1", "OP2", "C5'", "O5'", "C5*", "O5*", "H5'", "H5''", "H5'1", "H5'2"]:
+					if "5" not in self._residue_name and value in ["P", "O1P", "O2P", "OP1", "OP2", "C5'", "O5'", "C5*", "O5*", "H5'", "H5''", "H5'1", "H5'2"]:
 						# 接続情報追加
 						if value == "C5'":
-							self.connectivity[0] = key
+							self._connectivity[0] = key
 						# 原子の移動
-						self.shift_atoms[key] = value
-						del(self.atom_idxs[key])
-					elif "5" not in self.residue_name and value == "C4'":
+						self._shift_atoms[key] = value
+						del(self._atom_idxs[key])
+					elif "5" not in self._residue_name and value == "C4'":
 						# 接続情報追加
-						self.connectivity[1] = key
+						self._connectivity[1] = key
 
-			if -1 not in self.connectivity:
+			if -1 not in self._connectivity:
 				# 接続相手がある場合
-				self.bda = 1
+				self._bda = 1
 
-			if self.FLAG_SEP and -1 not in self.sep_connectivity:
-				self.sep_bda = 1
+			if self._flag_sep and -1 not in self._sep_connectivity:
+				self._sep_bda = 1
+
+
+
+
+# =============== variables =============== #
+residue_types = {
+	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"],
+	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "DNA_base"],
+	"Water": ["SOL", "WAT", "HOH"],
+	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn", "CAL", "ZIN"]
+}
+re_sign = re.compile(r"[-\+\*\'\"]")
+re_head = re.compile(r"^([\d'\s])")
+re_ter = re.compile(r"^TER")
+re_termH1 = re.compile(r"H[53]T")
+re_termH2 = re.compile(r"HO[53]")
+re_pyrimidine = re.compile(r'^\s*[RD][UTC][53]?\s*$')
+re_purine = re.compile(r'^\s*[RD][GA][53]?\s*$')
+re_5term = re.compile(r'^[RD][AGCTU]5$')
+re_3term = re.compile(r'^[RD][AGCTU]3$')
+program_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+template_files = [
+	os.path.join(program_dir, "template", "autofrag_3.templ"),
+	os.path.join(program_dir, "template", "autofrag_5.templ"),
+	os.path.join(program_dir, "template", "autofrag_m.templ")
+]
 
 
 
 # =============== functions =============== #
 def check_residue(residue_name):
-	"""
-	Function to determine residue type
-
-	Args:
-		residue_name (str): residue name
-
-	Returns:
-		str: residue type
-	"""
-	for key, value in RESIDUE_TYPES.items():
+	""" 残基の種類を調べる関数 """
+	for key, value in residue_types.items():
 		if residue_name in value:
 			return key
 	return "Other"
@@ -180,18 +176,18 @@ if __name__ == '__main__':
 	parser.add_argument("-o", dest="OUTPUT", metavar="OUTPUT.fred", required=True, help="Output file")
 	parser.add_argument("-S", "--separate", dest="FLAG_SEP", action="store_true", default=False, help="Nucleotide was devided into sugar+phosphate group and base")
 	parser.add_argument("-V", "--version", dest="VERSION", metavar="version", required=True, help="ajf version (3: ABINIT-MP 3, 5: ABINIT-MP 5 or later, m: mizuho ABINIT-MP) or template file path")
-	parser.add_argument("-O", dest="flag_overwrite", action="store_true", default=False, help="overwrite forcibly")
+	parser.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite forcibly")
 	args = parser.parse_args()
 
 	check_exist(args.INPUT, 2)
 
 	template_file = ""
 	if args.VERSION == "3":
-		template_file = TEMPLATE_FILES[0]
+		template_file = template_files[0]
 	elif args.VERSION == "5":
-		template_file = TEMPLATE_FILES[1]
+		template_file = template_files[1]
 	elif args.VERSION == "m":
-		template_file = TEMPLATE_FILES[2]
+		template_file = template_files[2]
 	else:
 		template_file = args.VERSION
 	check_exist(template_file, 2)
@@ -229,13 +225,13 @@ if __name__ == '__main__':
 
 				# アトムタイプ取得
 				atom_type = line[12:16].strip().replace("*", "'")
-				redb = RE_HEAD.search(atom_type)
+				redb = re_head.search(atom_type)
 				if redb:
-					atom_type = RE_HEAD.sub("", atom_type) + redb.group()
+					atom_type = re_head.sub("", atom_type) + redb.group()
 
 				# 残基情報取得
 				residue_info = line[17:26]
-				residue_name = RE_SIGN.sub("", line[17:20].strip())
+				residue_name = re_sign.sub("", line[17:20].strip())
 
 				if residue_info != residue_info_old:
 					# 前回の残基と異なる場合、最終処理とフラグメントの新規作成
@@ -305,7 +301,7 @@ if __name__ == '__main__':
 
 		if fragments[idx].type == "NucleicAcid" and len(fragments[idx].sep_atoms) != 0:
 			# 塩基と分割する場合、塩基のフラグメントを追加
-			fragment = FragmentData(args.FLAG_SEP)
+			fragment = FragmentData(args.flag_sep)
 			fragment.atom_idxs = new_fragments[new_idx].sep_atoms
 			new_fragments[new_idx].sep_atoms = {}
 			fragment.connectivity = new_fragments[new_idx].sep_connectivity
@@ -328,7 +324,7 @@ if __name__ == '__main__':
 	ligand = ",".join(ligand_list)
 
 	# 出力
-	if args.flag_overwrite == False:
+	if args.FLAG_OVERWRITE == False:
 		check_overwrite(args.OUTPUT)
 
 	cnt_fragment = 0
