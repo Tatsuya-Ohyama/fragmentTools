@@ -23,22 +23,18 @@ INDENT = "  "
 class FileFred:
 	""" fred File class """
 	def __init__(self):
-		self._n_atom = None
-		self._charge = None
+		self._n_atom = 0
+		self._charge = 0
 		self._fragments = []
 		self._parameters = {}
 
 
 	@property
 	def n_atom(self):
-		if self._n_atom is None:
-			return sum([len(obj_fragment.atoms) for obj_fragment in self._fragments])
 		return self._n_atom
 
 	@property
 	def charge(self):
-		if self._charge is None:
-			return sum([obj_fragment.charge for obj_fragment in self._fragments if obj_fragment.charge is not None])
 		return self._charge
 
 	@property
@@ -56,35 +52,43 @@ class FileFred:
 	@property
 	def complete_parameters(self):
 		parameters = copy.deepcopy(self._parameters)
-		if "&CNTRL" in parameters["LIST_ORDER"]:
-			parameters["&CNTRL"]["Natom"] = sum([len(v.atoms) for v in self._fragments])
+		if "&CNTRL" in parameters["LIST_ORDER"] and \
+			"Natom" in parameters.keys():
+			parameters["&CNTRL"]["Natom"] = sum([len(v.get_atoms()) for v in self._fragments])
+
+		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
+			"NF" in parameters.keys():
+			parameters["&FMOCNTRL"]["NF"] = len(self._fragments)
+
+		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
+			"Charge" in parameters.keys():
 			parameters["&CNTRL"]["Charge"] = sum([v.charge for v in self._fragments])
 
-		if "&FMOCNTRL" in parameters["LIST_ORDER"]:
-			parameters["&FMOCNTRL"]["NF"] = len(self._fragments)
+		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
+			"AutoFrag" in parameters.keys():
 			parameters["&FMOCNTRL"]["AutoFrag"] = "'OFF'"
 
 		parameters["&FRAGMENT"] = ""
 		parameters["&FRAGMENT"] += "\n".join([
 			"".join(
-				["{0:>8}".format(len(obj_fragment.atoms)) for obj_fragment in self._fragments[i:i+10]]
+				["{0:>8}".format(len(obj_fragment.get_atoms())) for obj_fragment in self._fragments[i:i+10]]
 			) for i in range(0, len(self._fragments), 10)
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
 			"".join(
-				["{0:>8}".format(obj_fragment.charge) for obj_fragment in self._fragments[i:i+10]]
+				["{0:>8}".format(obj_fragment.get_charge()) for obj_fragment in self._fragments[i:i+10]]
 			) for i in range(0, len(self._fragments), 10)
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
 			"".join(
-				["{0:>8}".format(obj_fragment.bda) for obj_fragment in self._fragments[i:i+10]]
+				["{0:>8}".format(obj_fragment.get_bda()) for obj_fragment in self._fragments[i:i+10]]
 			) for i in range(0, len(self._fragments), 10)
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
 			"\n".join([
 				"".join([
-					"{0:>8}".format(atom_idx) for atom_idx in obj_fragment.atoms[atom_i:atom_i+10]
-				]) for atom_i in range(0, len(obj_fragment.atoms), 10)
+					"{0:>8}".format(atom_idx) for atom_idx in obj_fragment.get_atoms()[atom_i:atom_i+10]
+				]) for atom_i in range(0, len(obj_fragment.get_atoms()), 10)
 			]) for obj_fragment in self._fragments
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
@@ -166,7 +170,6 @@ class FileFred:
 			is_list_type = False
 			group_name = None
 			self._parameters = {"LIST_ORDER": []}
-			fragment_index = 1
 			for line_idx, line_val in enumerate(obj_input, 1):
 				line_val = line_val.strip()
 
@@ -180,37 +183,41 @@ class FileFred:
 					flag_read = 3
 
 				elif flag_read == 1 and RE_FRAGMENT.search(line_val):
+					obj_fragment = FragmentData()
 					elems = [v.strip() for v in line_val.strip().split("|")]
 
-					obj_fragment = FragmentData()
-					obj_fragment.set_fragment_index(fragment_index)
-					fragment_index += 1
+					# Fragment index
+					if not elems[0].isdigit():
+						elems[0] = 0
+					obj_fragment.set_index(int(elems[0]))
 
 					# Charge
 					if RE_INT.search(elems[1]):
 						elems[1] = int(elems[1])
-						self._charge = self.charge + elems[1]
+						self._charge += elems[1]
 					else:
-						elems[1] = None
+						elems[1] = "ERR"
 					obj_fragment.set_charge(elems[1])
 
 					# BDA
 					if RE_INT.search(elems[2]):
 						elems[2] = int(elems[2])
 					else:
-						elems[2] = None
+						elems[2] = "ERR"
 					obj_fragment.set_bda(elems[2])
 
 					# atoms
 					obj_fragment.set_atoms([int(v) for v in elems[3].split()])
 
 					self._fragments.append(obj_fragment)
-					self._n_atom = self.n_atom + len(obj_fragment.atoms)
+					self._n_atom += len(obj_fragment.atoms)
 
 				elif flag_read == 2 and RE_CONNECTION.search(line_val):
 					# connection
 					atom_i, atom_j = [int(x) for x in line_val.strip().split(maxsplit=1)]
-					obj_fragment_j = [obj_fragment for obj_fragment in self._fragments if atom_j in obj_fragment.atoms][0]
+					obj_fragment_i = [obj_fragment for obj_fragment in self._fragments if atom_i in obj_fragment.get_atoms()][0]
+					obj_fragment_i.append_connection([atom_i, atom_j])
+					obj_fragment_j = [obj_fragment for obj_fragment in self._fragments if atom_j in obj_fragment.get_atoms()][0]
 					obj_fragment_j.append_connection([atom_i, atom_j])
 
 				elif flag_read == 3:
@@ -251,7 +258,7 @@ class FileFred:
 
 	def add_fragment(self, obj_fragment):
 		"""
-		Method to add fragment and move exsited fragment to new fragment
+		Method to add fragment
 
 		Args:
 			obj_fragment (FragmentData object): FragmentData object
@@ -259,71 +266,29 @@ class FileFred:
 		Returns:
 			self
 		"""
-		atoms = set(obj_fragment.atoms)
-		new_list_fragment = []
 		for fragment_idx, obj_fragment_registered in enumerate(self._fragments):
-			atoms_registered = set(obj_fragment_registered.atoms)
-			if len(atoms & atoms_registered) != 0:
-				new_atoms = sorted(list(atoms_registered - atoms))
+			remain_atoms = sorted(list(set(obj_fragment_registered.get_atoms()) - set(obj_fragment.get_atoms())))
+			obj_fragment_registered.set_atoms(remain_atoms)
+			if len(obj_fragment_registered.get_atoms()) == 0:
+				self._fragments.pop(fragment_idx)
 
-				if len(new_atoms) == 0:
-					continue
-
-				obj_fragment_registered.set_atoms(new_atoms)
-			new_list_fragment.append(obj_fragment_registered)
-		new_list_fragment.append(obj_fragment)
-
-		self._fragments = new_list_fragment
+		self._n_atom += len(obj_fragment.get_atoms())
+		self._fragments.append(obj_fragment)
 		return self
 
 
-	def check_fragments(self, verbose=False):
+	def append_connection(self, connection):
 		"""
-		Method to check fragments (charge, BDA and atoms)
+		Method to append fragment connection
 
 		Args:
-			verbose (bool): True=output to console
+			connection (list): connection information
 
 		Returns:
-			bool
+			self
 		"""
-		has_problem_whole = False
-
-		for i in range(len(self._fragments)):
-			obj_fragment = self._fragments[i]
-			has_problem = False
-
-			conflict_fragments = []
-			for j in range(len(self._fragments)):
-				if i == j:
-					continue
-				obj_fragment_other = self._fragments[j]
-				common_atom = set(obj_fragment.atoms) & set(obj_fragment_other.atoms)
-				if len(common_atom) != 0:
-					conflict_fragments.append(obj_fragment_other.fragment_index)
-			if len(conflict_fragments) != 0:
-				has_problem_whole = True
-				if verbose:
-					sys.stderr.write("WARNING: Fragment {0} has problem:\n".format(obj_fragment.fragment_index))
-					sys.stderr.write("        * Conflicted atoms with Fragment {0}\n".format(", ".join([str(v) for v in conflict_fragments])))
-				has_problem = True
-
-			if obj_fragment.charge is None:
-				has_problem_whole = True
-				if verbose:
-					if has_problem:
-						sys.stderr.write("WARNING: Fragment {0} has problem:\n".format(obj_fragment.fragment_index))
-					sys.stderr.write("        * No charge information.\n")
-				has_problem = True
-
-			if obj_fragment.bda is None:
-				has_problem_whole = True
-				if verbose:
-					if has_problem:
-						sys.stderr.write("WARNING: Fragment {0} has problem:\n".format(obj_fragment.fragment_index))
-					sys.stderr.write("        * No BDA information.\n")
-
-		return has_problem_whole
+		self._connection.append(connection)
+		return self
 
 
 	def write(self, output_file, indent=INDENT):
@@ -337,15 +302,17 @@ class FileFred:
 		Returns:
 			self
 		"""
-		self.check_fragments(verbose=True)
+		tmp_fragments = sorted([[obj_fragment.min_index, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
+		self._fragments = [obj_fragment[1].set_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
+
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
-			for obj_fragment in self._fragments:
+			for idx, obj_fragment in enumerate(self._fragments, 1):
+				obj_fragment.set_index(idx)
 				obj_output.write("{0:>7} |{1:>5}   |{2:>3}  | {3}\n".format(
-					obj_fragment.fragment_index,
-					obj_fragment.charge if obj_fragment.charge is not None else "ERR",
-					obj_fragment.bda if obj_fragment.bda is not None else "ERR",
-					" ".join(["{0:>8}".format(x) for x in obj_fragment.atoms])
+					obj_fragment.index,
+					obj_fragment.get_charge(), obj_fragment.get_bda(),
+					" ".join(["{0:>8}".format(x) for x in obj_fragment.get_atoms()])
 				))
 			obj_output.write("\n")
 
@@ -354,6 +321,7 @@ class FileFred:
 				list_connections = obj_fragment.get_connections()
 				if len(list_connections) == 0:
 					continue
+
 				for connection in list_connections:
 					obj_output.write("{0[0]:>9} {0[1]:>9}\n".format(connection))
 			obj_output.write("\n")
@@ -361,21 +329,30 @@ class FileFred:
 			obj_output.write("===============< namelist >===============\n")
 
 			if "&CNTRL" in self._parameters["LIST_ORDER"]:
-				self._parameters["&CNTRL"]["Natom"] = self.n_atom
-				self._parameters["&CNTRL"]["Charge"] = self.charge
+				if "Natom" in self._parameters["&CNTRL"].keys():
+					self._parameters["&CNTRL"]["Natom"] = self._n_atom
 
-			if "&FMOCNTRL" in self._parameters["LIST_ORDER"]:
+				if "Charge" in self._parameters["&CNTRL"].keys():
+					self._parameters["&CNTRL"]["Charge"] = self._charge
+
+			if "&FMOCNTRL" in self._parameters["LIST_ORDER"] and \
+				"NF" in self._parameters["&FMOCNTRL"].keys():
 				self._parameters["&FMOCNTRL"]["NF"] = len(self._fragments)
+
 
 			for group_name in self._parameters["LIST_ORDER"]:
 				obj_output.write("{0}\n".format(group_name))
-				if isinstance(self._parameters[group_name], dict):
+				if group_name == "&FRAGMENT":
+					obj_output.write("{...}\n")
+
+				elif isinstance(self._parameters[group_name], dict):
 					for parameter_name, parameter_value in self._parameters[group_name].items():
 						obj_output.write("{0}{1}={2}\n".format(
 							indent,
 							parameter_name,
 							parameter_value
 						))
+
 				else:
 					for line_val in self._parameters[group_name]:
 						obj_output.write(line_val + "\n")

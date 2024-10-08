@@ -6,6 +6,7 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 from mods.FragmentData import FragmentData
 from mods.func_string import split_n
+import parmed
 
 
 
@@ -116,11 +117,8 @@ class FileAJF:
 				or pdb_file.startswith('"') and pdb_file.endswith('"'):
 				pdb_file = pdb_file[1:-1]
 
-		n_atom = 0
-		with open(pdb_file, "r") as obj_input:
-			for line_val in obj_input:
-				if line_val.startswith("ATOM") or line_val.startswith("HETATM"):
-					n_atom += 1
+		obj_mol = parmed.load_file(pdb_file)
+		n_atom = len(obj_mol.atoms)
 
 		# deal with fragment information
 		if "&FRAGMENT" not in self.parameters["LIST_ORDER"]:
@@ -146,7 +144,7 @@ class FileAJF:
 					sys.exit(1)
 
 				list_fragments += [
-					FragmentData().set_fragment_index(i).set_atoms([None for _ in range(v)])
+					FragmentData().set_index(i).set_atoms([None for _ in range(v)])
 					for i, v in enumerate(datas, fragment_idx_start)
 				]
 				fragment_idx_start += len(datas)
@@ -286,7 +284,7 @@ class FileAJF:
 				if isinstance(self._parameters[group_name], dict):
 					for parameter_name, parameter_value in self._parameters[group_name].items():
 						obj_output.write("{0}{1}={2}\n".format(
-							INDENT,
+							indent,
 							parameter_name,
 							parameter_value
 						))

@@ -11,19 +11,21 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 import argparse
 import os
 import re
+import json
 
 from mods.func_prompt_io import *
 from mods.FileAJF import FileAJF
 from mods.FileFred import FileFred
-from mods.FragmentData import FragmentData
 from mods.MoleculeInformation import MoleculeInformation
 from mods.func_string import target_range
+from mods.AutoFrag import fragmentation
 
 
 
 # =============== constant =============== #
 PROGRAM_ROOT = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 DEFAULT_AJF_TEMPLATE = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.templ")
+DEFAULT_AJF_CONFIG = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.json")
 
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
@@ -108,6 +110,14 @@ if __name__ == '__main__':
 		subparser = parser.add_subparsers(help="subcommand")
 		subparser.required = True
 
+		parser_autofrag = subparser.add_parser("autofrag", help="Auto fragmentation for PDB (pdb -> fred)")
+		parser_autofrag.set_defaults(func="autofrag")
+		parser_autofrag.add_argument("-p", dest="INPUT_FILE", metavar="INPUT.pdb", required=True, help="structure file")
+		parser_autofrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", required=True, help="fred file")
+		parser_autofrag.add_argument("-sp", "--separate-protein", dest="FRAGMENT_PROTEIN", metavar="FRAGMENT_OPTION_PROTEIN", choices=["+amino", "/amino", "+peptide", "/peptide"], default="+amino", help="fragmentation option for proteins (`+amino`, `/amino`, `+peptide`, or `/peptide`; Default: `+amino`)")
+		parser_autofrag.add_argument("-sn", "--separate-nucleic", dest="FRAGMENT_NUCLEIC", metavar="FRAGMENT_OPTION_NUCLEIC", choices=["+base", "/base", "/sugar"], default="+base", help="fragmentation option for nucleic acids (`+base`, `/base`, or `/sugar`; Default: `+base`)")
+		parser_autofrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
+
 		parser_edit = subparser.add_parser("edit", help="Convert ajf to fred (ajf -> fred)")
 		parser_edit.set_defaults(func="edit")
 		parser_edit.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.ajf", required=True, help="ajf file")
@@ -127,14 +137,6 @@ if __name__ == '__main__':
 		parser_output.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.ajf", required=True, help="ajf file")
 		parser_output.add_argument("-p", "--pdb", dest="PDB_FILE", metavar="REF.pdb", help="Reference PDB (if not specify, this program use ReadGeom PDB in ajf file)")
 		parser_output.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
-
-		parser_autofrag = subparser.add_parser("autofrag", help="Auto fragmentation for PDB (pdb -> fred)")
-		parser_autofrag.set_defaults(func="autofrag")
-		parser_autofrag.add_argument("-p", dest="INPUT_FILE", metavar="INPUT.pdb", required=True, help="structure file")
-		parser_autofrag.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.fred", required=True, help="fred file")
-		parser_autofrag.add_argument("-s", "--separate", action="store_true", help="Nucleotide is separates to base and sugar+phosphate")
-		parser_autofrag.add_argument("-v", "--version", choices=["3", "5", "m"], help="ajf version: 3 = abinit-mp3, 5 = abinitmp5, m = mizuho")
-		parser_autofrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
 		parser_editfrag = subparser.add_parser("editfrag", help="Create new fred in which fragments were devided based on PDB and fred (pdb + fred -> fred)")
 		parser_editfrag.set_defaults(func="editfrag")
@@ -156,7 +158,29 @@ if __name__ == '__main__':
 
 	check_exist(args.INPUT_FILE, 2)
 
-	if args.func == "edit":
+	if args.func == "autofrag":
+		# autofrag mode
+		parameters = {}
+		with open(DEFAULT_AJF_CONFIG, "r") as obj_input:
+			parameters = json.load(obj_input)
+
+		check_exist(args.INPUT_FILE, 2)
+		list_fragments = fragmentation(args.INPUT_FILE, sep_amino=args.FRAGMENT_PROTEIN, sep_nuc=args.FRAGMENT_NUCLEIC)
+
+		obj_fred = FileFred()
+		parameters["&CNTRL"]["Title"] = "'{}'".format(os.path.splitext(args.INPUT_FILE)[0])
+		parameters["&CNTRL"]["ReadGeom"] = "'{}'".format(args.INPUT_FILE)
+		parameters["&CNTRL"]["WriteGeom"] = "'{}.cpf'".format(os.path.splitext(args.INPUT_FILE)[0])
+		parameters["&FMOCNTRL"]["FragSizeAminoacid"] = "'{}'".format(args.FRAGMENT_PROTEIN)
+		parameters["&FMOCNTRL"]["FragSizeNucleotide"] = "'{}'".format(args.FRAGMENT_NUCLEIC)
+		obj_fred.set_parameters(parameters)
+		obj_fred.set_n_atom(sum([len(obj_fragment.atoms) for obj_fragment in list_fragments]))
+		obj_fred.set_charge(sum([obj_fragment.charge for obj_fragment in list_fragments]))
+		obj_fred.set_fragments(list_fragments)
+		obj_fred.write(args.OUTPUT_FILE)
+
+
+	elif args.func == "edit":
 		# edit mode (convert to edit-style)
 
 		# read .ajf file
@@ -209,11 +233,6 @@ if __name__ == '__main__':
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)
 		obj_ajf.write(args.OUTPUT_FILE)
-
-
-	elif args.func == "autofrag":
-		# autofrag mode
-		pass
 
 
 	elif args.func == "editfrag":
