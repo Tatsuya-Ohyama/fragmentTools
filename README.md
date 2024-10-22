@@ -181,5 +181,10 @@ Copyright (c) 2021 Tatsuya Ohyama
 
 
 ## ChangeLog
+### Ver. 12.0 (2024-10-08)
+* `autofrag` サブコマンドを実装した。
+* `autofrag.py` を廃止した。
+* `FragmentData` クラスを parmed オブジェクトに対応した。
+
 ### Ver. 11.0 (2021-12-22)
 * 公開した。

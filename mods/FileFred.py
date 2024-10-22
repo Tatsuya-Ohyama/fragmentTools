@@ -54,7 +54,7 @@ class FileFred:
 		parameters = copy.deepcopy(self._parameters)
 		if "&CNTRL" in parameters["LIST_ORDER"] and \
 			"Natom" in parameters.keys():
-			parameters["&CNTRL"]["Natom"] = sum([len(v.atoms) for v in self._fragments])
+			parameters["&CNTRL"]["Natom"] = sum([len(v.get_atoms()) for v in self._fragments])
 
 		if "&FMOCNTRL" in parameters["LIST_ORDER"] and \
 			"NF" in parameters.keys():
@@ -71,24 +71,24 @@ class FileFred:
 		parameters["&FRAGMENT"] = ""
 		parameters["&FRAGMENT"] += "\n".join([
 			"".join(
-				["{0:>8}".format(len(obj_fragment.atoms)) for obj_fragment in self._fragments[i:i+10]]
+				["{0:>8}".format(len(obj_fragment.get_atoms())) for obj_fragment in self._fragments[i:i+10]]
 			) for i in range(0, len(self._fragments), 10)
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
 			"".join(
-				["{0:>8}".format(obj_fragment.charge) for obj_fragment in self._fragments[i:i+10]]
+				["{0:>8}".format(obj_fragment.get_charge()) for obj_fragment in self._fragments[i:i+10]]
 			) for i in range(0, len(self._fragments), 10)
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
 			"".join(
-				["{0:>8}".format(obj_fragment.bda) for obj_fragment in self._fragments[i:i+10]]
+				["{0:>8}".format(obj_fragment.get_bda()) for obj_fragment in self._fragments[i:i+10]]
 			) for i in range(0, len(self._fragments), 10)
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
 			"\n".join([
 				"".join([
-					"{0:>8}".format(atom_idx) for atom_idx in obj_fragment.atoms[atom_i:atom_i+10]
-				]) for atom_i in range(0, len(obj_fragment.atoms), 10)
+					"{0:>8}".format(atom_idx) for atom_idx in obj_fragment.get_atoms()[atom_i:atom_i+10]
+				]) for atom_i in range(0, len(obj_fragment.get_atoms()), 10)
 			]) for obj_fragment in self._fragments
 		]) + "\n"
 		parameters["&FRAGMENT"] += "\n".join([
@@ -189,7 +189,7 @@ class FileFred:
 					# Fragment index
 					if not elems[0].isdigit():
 						elems[0] = 0
-					obj_fragment.set_fragment_index(int(elems[0]))
+					obj_fragment.set_index(int(elems[0]))
 
 					# Charge
 					if RE_INT.search(elems[1]):
@@ -215,9 +215,9 @@ class FileFred:
 				elif flag_read == 2 and RE_CONNECTION.search(line_val):
 					# connection
 					atom_i, atom_j = [int(x) for x in line_val.strip().split(maxsplit=1)]
-					obj_fragment_i = [obj_fragment for obj_fragment in self._fragments if atom_i in obj_fragment.atoms][0]
+					obj_fragment_i = [obj_fragment for obj_fragment in self._fragments if atom_i in obj_fragment.get_atoms()][0]
 					obj_fragment_i.append_connection([atom_i, atom_j])
-					obj_fragment_j = [obj_fragment for obj_fragment in self._fragments if atom_j in obj_fragment.atoms][0]
+					obj_fragment_j = [obj_fragment for obj_fragment in self._fragments if atom_j in obj_fragment.get_atoms()][0]
 					obj_fragment_j.append_connection([atom_i, atom_j])
 
 				elif flag_read == 3:
@@ -267,12 +267,12 @@ class FileFred:
 			self
 		"""
 		for fragment_idx, obj_fragment_registered in enumerate(self._fragments):
-			remain_atoms = sorted(list(set(obj_fragment_registered.atoms) - set(obj_fragment.atoms)))
+			remain_atoms = sorted(list(set(obj_fragment_registered.get_atoms()) - set(obj_fragment.get_atoms())))
 			obj_fragment_registered.set_atoms(remain_atoms)
-			if len(obj_fragment_registered.atoms) == 0:
+			if len(obj_fragment_registered.get_atoms()) == 0:
 				self._fragments.pop(fragment_idx)
 
-		self._n_atom += len(obj_fragment.atoms)
+		self._n_atom += len(obj_fragment.get_atoms())
 		self._fragments.append(obj_fragment)
 		return self
 
@@ -303,16 +303,16 @@ class FileFred:
 			self
 		"""
 		tmp_fragments = sorted([[obj_fragment.min_index, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
-		self._fragments = [obj_fragment[1].set_fragment_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
+		self._fragments = [obj_fragment[1].set_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
 
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
 			for idx, obj_fragment in enumerate(self._fragments, 1):
-				obj_fragment.set_fragment_index(idx)
+				obj_fragment.set_index(idx)
 				obj_output.write("{0:>7} |{1:>5}   |{2:>3}  | {3}\n".format(
-					obj_fragment.fragment_index,
-					obj_fragment.charge, obj_fragment.bda,
-					" ".join(["{0:>8}".format(x) for x in obj_fragment.atoms])
+					obj_fragment.index,
+					obj_fragment.get_charge(), obj_fragment.get_bda(),
+					" ".join(["{0:>8}".format(x) for x in obj_fragment.get_atoms()])
 				))
 			obj_output.write("\n")
 
@@ -321,29 +321,41 @@ class FileFred:
 				list_connections = obj_fragment.get_connections()
 				if len(list_connections) == 0:
 					continue
+
 				for connection in list_connections:
 					obj_output.write("{0[0]:>9} {0[1]:>9}\n".format(connection))
 			obj_output.write("\n")
 
 			obj_output.write("===============< namelist >===============\n")
 
+			if "&CNTRL" in self._parameters["LIST_ORDER"]:
+				if "Natom" in self._parameters["&CNTRL"].keys():
+					self._parameters["&CNTRL"]["Natom"] = self._n_atom
+
+				if "Charge" in self._parameters["&CNTRL"].keys():
+					self._parameters["&CNTRL"]["Charge"] = self._charge
+
 			if "&FMOCNTRL" in self._parameters["LIST_ORDER"] and \
-				"NF" in self._parameters.keys():
+				"NF" in self._parameters["&FMOCNTRL"].keys():
 				self._parameters["&FMOCNTRL"]["NF"] = len(self._fragments)
+
 
 			for group_name in self._parameters["LIST_ORDER"]:
 				obj_output.write("{0}\n".format(group_name))
-				if isinstance(self._parameters[group_name], dict):
+				if group_name == "&FRAGMENT":
+					obj_output.write("{...}\n")
+
+				elif isinstance(self._parameters[group_name], dict):
 					for parameter_name, parameter_value in self._parameters[group_name].items():
 						obj_output.write("{0}{1}={2}\n".format(
-							INDENT,
+							indent,
 							parameter_name,
 							parameter_value
 						))
+
 				else:
 					for line_val in self._parameters[group_name]:
 						obj_output.write(line_val + "\n")
 				obj_output.write("/\n\n")
-
 
 		return self
