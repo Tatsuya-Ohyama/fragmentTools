@@ -199,7 +199,10 @@ class FragmentData:
 		Returns:
 			int: charge
 		"""
-		return self.charge
+		if self.charge is not None:
+			return self.charge
+		else:
+			return "ERR"
 
 
 	def get_bda(self):
@@ -209,7 +212,10 @@ class FragmentData:
 		Returns:
 			int: bda
 		"""
-		return self._bda
+		if self._bda is not None:
+			return self._bda
+		else:
+			return "ERR"
 
 
 	def get_connections(self):

@@ -175,7 +175,7 @@ if __name__ == '__main__':
 		parameters["&FMOCNTRL"]["FragSizeNucleotide"] = "'{}'".format(args.FRAGMENT_NUCLEIC)
 		obj_fred.set_parameters(parameters)
 		obj_fred.set_n_atom(sum([len(obj_fragment.atoms) for obj_fragment in list_fragments]))
-		obj_fred.set_charge(sum([obj_fragment.charge for obj_fragment in list_fragments]))
+		obj_fred.set_charge(sum([0 if obj_fragment.charge is None else obj_fragment.charge for obj_fragment in list_fragments]))
 		obj_fred.set_fragments(list_fragments)
 		obj_fred.write(args.OUTPUT_FILE)
 
