@@ -302,9 +302,6 @@ class FileFred:
 		Returns:
 			self
 		"""
-		tmp_fragments = sorted([[obj_fragment.min_index, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
-		self._fragments = [obj_fragment[1].set_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
-
 		with open(output_file, "w") as obj_output:
 			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
 			for idx, obj_fragment in enumerate(self._fragments, 1):

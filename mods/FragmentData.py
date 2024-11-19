@@ -54,10 +54,6 @@ class FragmentData:
 	def atoms(self):
 		return self._atoms
 
-	@property
-	def min_index(self):
-		return min(self._atoms)
-
 
 	def set_index(self, fragment_index):
 		"""
