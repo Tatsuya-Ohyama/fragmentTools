@@ -20,6 +20,7 @@ from mods.FileFred import FileFred
 from mods.MoleculeInformation import MoleculeInformation
 from mods.func_string import target_range
 from mods.AutoFrag import fragmentation
+from mods.WriteFrag import write_frag
 
 
 
@@ -120,6 +121,12 @@ if __name__ == '__main__':
 		parser_editfrag.add_argument("-m", dest="FLAG_MULTI", action="store_true", default=False, help="applying separation to other the same type residues")
 		parser_editfrag.add_argument("-c", dest="CONNECTION_LIST", metavar = "ATOM1-ATOM2", nargs = "+", required=True, help = "connection list described by Ambermask (Ex: :EG@C9-:EG@C10  34-25)")
 		parser_editfrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
+
+		parser_writefrag = subparser.add_parser("writefrag", help="Write each fragment structure")
+		parser_writefrag.set_defaults(func="writefrag")
+		parser_writefrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
+		parser_writefrag.add_argument("-p", dest="STRUCTURE_FILE", metavar="STRUCTURE.pdb", required=True, help="system structure file")
+		parser_writefrag.add_argument("-o", dest="OUTPUT_PREFIX", metavar="OUTPUT_PREFIX", required=True, help="output prefix")
 
 		args = parser.parse_args()
 
@@ -266,3 +273,15 @@ if __name__ == '__main__':
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)
 		obj_fred.write(args.OUTPUT_FILE)
+
+
+	elif args.func == "writefrag":
+		check_exist(args.INPUT_FILE, 2)
+		check_exist(args.STRUCTURE_FILE, 2)
+
+		obj_fred = FileFred().read(args.INPUT_FILE)
+		list_obj_fragments = obj_fred.fragments
+
+		obj_mol = parmed.load_file(args.STRUCTURE_FILE)
+
+		write_frag(args.OUTPUT_PREFIX, list_obj_fragments, obj_mol)
