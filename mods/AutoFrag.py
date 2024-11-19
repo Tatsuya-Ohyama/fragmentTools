@@ -41,7 +41,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 	obj_mol = parmed.load_file(structure_file)
 	list_obj_fragments = [[FragmentData().set_atoms(list(obj_residue.atoms))] for obj_residue in obj_mol.residues]
 	list_atom_info = {obj_atom: None for obj_atom in obj_mol.atoms}
-	list_obj_atom_moved = [[] for obj_residue in obj_mol.residues]
+	list_obj_atom_shift = [[] for obj_residue in obj_mol.residues]
 	for frag_i, obj_residue in enumerate(obj_mol.residues):
 		res_type = None
 		for res_type_ref, list_resnames in RESIDUE_TYPES.items():
@@ -73,7 +73,6 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 			if len(list_bond_partners) == 0:
 				# single residue
-				obj_residue.ter = True
 				term_type = "S"
 
 			elif len(list_bond_partners) == 1:
@@ -89,12 +88,10 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 				elif obj_atom_partner in obj_mol.residues[frag_i-1].atoms:
 					# N-terminal
-					obj_mol.residues[frag_i-1].ter = True
 					term_type = "N"
 
 				else:
 					# C-terminal
-					obj_residue.ter = True
 					term_type = "C"
 					obj_atom_C = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "C"][0]
 					list_obj_atom_O = [obj_atom for obj_atom in obj_atom_C.bond_partners if obj_atom.element == 8]
@@ -121,6 +118,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				list_side_chain = []
 				for obj_atom in list_obj_fragments[frag_i][0].atoms:
 					if obj_residue.name == "GLY":
+						# do not separate side chain for GLY
 						list_main_chain.append(obj_atom)
 
 					elif obj_atom.name in ["N", "H", "C", "O", "CA", "HA"]:
@@ -156,19 +154,25 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 
 			if sep_amino in ["+amino", "/amino"]:
-				# move atoms in main chain fragments
+				# shift atoms in main chain fragments
 				list_remain_atoms = []
-				list_move_atoms = []
+				list_shift_atoms = []
 				for obj_atom in list_obj_fragments[frag_i][0].atoms:
 					if obj_atom.name in ["C", "O"] and term_type != "C":
-						# move to next fragment
-						list_move_atoms.append(obj_atom)
+						# shift to next fragment
+						list_shift_atoms.append(obj_atom)
 
 					else:
 						list_remain_atoms.append(obj_atom)
 
 				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
-				list_obj_atom_moved[frag_i+1] = list_move_atoms
+				if frag_i+1 >= len(list_obj_atom_shift):
+					# end of shift atom
+					if len(list_shift_atoms) != 0:
+						sys.stderr.write("ERROR: algorithm error in amino fragmentation. Please report to developer.\n")
+						sys.exit(1)
+					continue
+				list_obj_atom_shift[frag_i+1] = list_shift_atoms
 			continue
 
 
@@ -242,18 +246,18 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				list_obj_fragments[frag_i][1].set_atoms(list_sugar)
 				list_obj_fragments[frag_i][2].set_atoms(list_base)
 
-			# move atoms in main chains
+			# shift atoms in main chains
 			list_remain_atoms = []
-			list_move_atoms = []
+			list_shift_atoms = []
 			for obj_atom in list_obj_fragments[frag_i][0].atoms:
 				if obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
-					list_move_atoms.append(obj_atom)
+					list_shift_atoms.append(obj_atom)
 
 				else:
 					list_remain_atoms.append(obj_atom)
 
 			list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
-			list_obj_atom_moved[frag_i+1] = list_move_atoms
+			list_obj_atom_shift[frag_i+1] = list_shift_atoms
 			continue
 
 
@@ -285,8 +289,8 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 		list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
 
 
-	# update moved atoms
-	for list_fragment, list_obj_atom in zip(list_obj_fragments, list_obj_atom_moved):
+	# update shift atoms
+	for list_fragment, list_obj_atom in zip(list_obj_fragments, list_obj_atom_shift):
 		list_fragment[0].set_atoms(list_fragment[0].atoms + list_obj_atom)
 
 	# flatten fragment list
@@ -312,5 +316,6 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					obj_fragment_partner.add_bda(1)
 					obj_fragment.add_charge(1)
 					obj_fragment_partner.add_charge(-1)
+					print(obj_fragment.index, obj_fragment.charge, [obj_atom_partner, obj_atom])
 
 	return list_obj_fragments
