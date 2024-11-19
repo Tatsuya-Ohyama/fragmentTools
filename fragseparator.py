@@ -2,16 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-fragseparator
-fred ファイルを元に、各フラグの PDB ファイルを生成するプログラム
+fragseparator.py
+
+Program to write .pdb file for each fragment
 """
 
-import sys, os, re, signal
+import sys, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
 
+import parmed
+
 from mods.func_prompt_io import *
+from mods.FileFred import FileFred
 
 
 
@@ -20,62 +24,28 @@ from mods.func_prompt_io import *
 
 # =============== main =============== #
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description = "fragseparator", formatter_class=argparse.RawTextHelpFormatter)
-	parser.add_argument("-f", dest = "fred", metavar = "INPUT.fred", help = "Input fred file")
-	parser.add_argument("-p", dest = "pdb", metavar = "INPUT.pdb", help = "Input pdb file")
-	parser.add_argument("-o", dest = "output", metavar = "OUTPUT", help = "Prefix for output")
+	parser = argparse.ArgumentParser(description="fragseparator", formatter_class=argparse.RawTextHelpFormatter)
+	parser.add_argument("-f", dest="FRED_FILE", metavar="INPUT.fred", help="Input fred file")
+	parser.add_argument("-p", dest="PDB_FILE", metavar="INPUT.pdb", help="Input pdb file")
+	parser.add_argument("-o", dest="OUTPUT_PREFIX", metavar="OUTPUT_PREFIX", help="Prefix for output")
 	args = parser.parse_args()
 
-	check_exist(args.fred, 2)
-	check_exist(args.pdb, 2)
-
-	ref_atoms = []
-	get_atoms = []
-	flag_read = False
+	check_exist(args.FRED_FILE, 2)
+	check_exist(args.PDB_FILE, 2)
 
 	# fred ファイル読み込み
-	with open(args.fred, "r") as obj_input:
-		re_wsp = re.compile(r"[\s\t]+")
-		re_empty = re.compile(r"^[\s\t]*\n$")
-		for line in obj_input:
-			if "<< connections" in line:
-				# 接続情報になったら終了
-				break
-
-			if re_empty.search(line):
-				# 空行はスキップ
-				continue
-
-			if flag_read:
-				# 読み込みフラグが True の場合
-				datas = line.split("|")
-				datas = re_wsp.split(datas[-1])
-				tmp_atoms = list(map(lambda x : x.strip(), datas))
-				ref_atoms.append(tmp_atoms)
-				get_atoms.append([])
-			else:
-				# 1 行目はスルーする
-				flag_read = True
+	obj_fred = FileFred().read(args.FRED_FILE)
 
 	# PDB ファイル読み込み
-	with open(args.pdb, "r") as obj_input:
-		re_atom = re.compile(r"^(?:(?:ATOM)|(?:HETATM))")
-		for line in obj_input:
-			if re_atom.search(line):
-				atom_idx = line[6:11].strip()
-				idx = 0
-				for refs in ref_atoms:
-					if atom_idx in refs:
-						get_atoms[idx].append(line)
-						break
-					idx += 1
+	obj_mol = parmed.load_file(args.PDB_FILE)
+	n_atoms = len(obj_mol.atoms)
 
 	# 出力
-	for idx, atoms in enumerate(get_atoms):
-		output = "{prefix}_{idx:03d}.pdb".format(prefix = args.output, idx = idx + 1)
-		with open(output, "w") as obj_output:
-			for line in atoms:
-				obj_output.write(line)
-			obj_output.write("END\n")
+	for obj_fragment in obj_fred.fragments:
+		list_strip_flag = [False if i in obj_fragment.atoms else True for i in range(1, n_atoms+1)]
+		obj_mol_output = obj_mol.copy(parmed.Structure)
+		obj_mol_output.strip(list_strip_flag)
 
-		sys.stderr.write("INFO: {0} was created.\n".format(output))
+		output_file = "{}_{:03d}.pdb".format(args.OUTPUT_PREFIX, obj_fragment.index)
+		obj_mol_output.write_pdb(output_file, renumber=True)
+		sys.stderr.write("INFO: {0} was created.\n".format(output_file))
