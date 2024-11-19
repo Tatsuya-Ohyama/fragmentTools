@@ -295,7 +295,9 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 	# flatten fragment list
 	list_obj_fragments = [v2 for v1 in list_obj_fragments for v2 in v1 if len(v2.atoms) != 0]
-	list_obj_fragments = [obj_fragment.set_index(frag_idx).set_bda(0) for frag_idx, obj_fragment in enumerate(list_obj_fragments, 1)]
+
+	# update fragment information
+	list_obj_fragments = [obj_fragment.set_index(frag_idx).set_bda(0).sort_atoms() for frag_idx, obj_fragment in enumerate(list_obj_fragments, 1)]
 
 	# update atom information
 	for obj_fragment in list_obj_fragments:
@@ -316,6 +318,5 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					obj_fragment_partner.add_bda(1)
 					obj_fragment.add_charge(1)
 					obj_fragment_partner.add_charge(-1)
-					print(obj_fragment.index, obj_fragment.charge, [obj_atom_partner, obj_atom])
 
 	return list_obj_fragments

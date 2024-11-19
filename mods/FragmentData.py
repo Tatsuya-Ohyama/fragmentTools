@@ -174,6 +174,20 @@ class FragmentData:
 		return self
 
 
+	def sort_atoms(self):
+		"""
+		Method to sort atom
+		"""
+		if isinstance(self._atoms[0], parmed.topologyobjects.Atom):
+			atom_table = {obj_atom.idx+1: obj_atom for obj_atom in self._atoms}
+			self._atoms = [v2 for v1, v2 in sorted(atom_table.items(), key=lambda x:x[0])]
+
+		else:
+			self._atoms = [atom_idx for atom_idx in sorted(self._atoms)]
+
+		return self
+
+
 	def get_atoms(self):
 		"""
 		Method to output atom list
