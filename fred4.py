@@ -32,6 +32,8 @@ DEFAULT_AJF_CONFIG = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.json")
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
 
+VERSION = "13.0"
+
 
 
 # =============== functions =============== #
@@ -78,7 +80,7 @@ def check_electrons(list_obj_fragments, pdb_file):
 # =============== main =============== #
 if __name__ == '__main__':
 	try:
-		parser = argparse.ArgumentParser(description="Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
+		parser = argparse.ArgumentParser(description="Fragment editor for ABINIT-MP.\nVersion: {}".format(VERSION), formatter_class=argparse.RawTextHelpFormatter)
 
 		subparser = parser.add_subparsers(help="subcommand")
 		subparser.required = True
@@ -131,9 +133,8 @@ if __name__ == '__main__':
 		args = parser.parse_args()
 
 	except TypeError:
-		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
+		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag | writefrag)\n")
 		sys.exit(1)
-
 
 	check_exist(args.INPUT_FILE, 2)
 
@@ -276,7 +277,6 @@ if __name__ == '__main__':
 
 
 	elif args.func == "writefrag":
-		check_exist(args.INPUT_FILE, 2)
 		check_exist(args.STRUCTURE_FILE, 2)
 
 		obj_fred = FileFred().read(args.INPUT_FILE)
