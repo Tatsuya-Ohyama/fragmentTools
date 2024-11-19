@@ -173,17 +173,43 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 						list_remain_atoms.append(obj_atom)
 
 				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
-				if frag_i+1 >= len(list_obj_atom_shift):
-					# end of shift atom
-					if len(list_shift_atoms) != 0:
-						sys.stderr.write("ERROR: Algorithm error in amino fragmentation. Please report to developer.\n")
+				if len(list_shift_atoms) != 0:
+					if frag_i+1 < len(list_obj_atom_shift):
+						list_obj_atom_shift[frag_i+1] = list_shift_atoms
+
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in amino acid fragmentation. Please report to developer.\n")
 						sys.exit(1)
-					continue
-				list_obj_atom_shift[frag_i+1] = list_shift_atoms
 			continue
 
 
 		if res_type == "NucleicAcid":
+			# determine terminal
+			list_atoms = set(obj_residue.atoms)
+			list_bond_partners = [set(obj_atom.bond_partners) - list_atoms for obj_atom in obj_residue.atoms]
+			list_bond_partners = [v for v in list_bond_partners if len(v) != 0]
+			term_type = None
+
+			if len(list_bond_partners) == 0:
+				# single residue
+				term_type = "S"
+
+			elif len(list_bond_partners) == 1:
+				# bond with one residue -> terminal
+				obj_atom_partner = list_bond_partners.pop().pop()
+				if frag_i == 0:
+					# 5'-terminal (first fragment)
+					term_type = "5"
+
+				elif obj_atom_partner not in obj_mol.residues[frag_i-1].atoms:
+					# N-terminal (not connected previous residue)
+					term_type = "5"
+
+				else:
+					# C-terminal
+					term_type = "3"
+
 			if sep_nuc == "+base":
 				# add fragment information
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
@@ -257,14 +283,22 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			list_remain_atoms = []
 			list_shift_atoms = []
 			for obj_atom in list_obj_fragments[frag_i][0].atoms:
-				if obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
+				if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
 					list_shift_atoms.append(obj_atom)
 
 				else:
 					list_remain_atoms.append(obj_atom)
 
 			list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
-			list_obj_atom_shift[frag_i+1] = list_shift_atoms
+			if len(list_shift_atoms) != 0:
+				if 0 < frag_i:
+					list_obj_atom_shift[frag_i-1] = list_shift_atoms
+					list_obj_fragments[frag_i-1][0].add_charge(-1)
+
+				else:
+					# end of shift atom
+					sys.stderr.write("ERROR: Algorithm error in amino acid fragmentation. Please report to developer.\n")
+					sys.exit(1)
 			continue
 
 
@@ -315,9 +349,9 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 	# make connection and bda information
 	# BDA = atom in negative charged fragment; BAA = atom in positive charged fragment
 	for obj_fragment in list_obj_fragments:
-		list_connections = []
 		list_obj_atom_member = set(obj_fragment.atoms)
 		for obj_atom in obj_fragment.atoms:
+			# make bonded atom list in other fragment
 			list_obj_atom_partners = set(obj_atom.bond_partners) - list_obj_atom_member
 			for obj_atom_partner in list_obj_atom_partners:
 				obj_fragment_partner = list_atom_info[obj_atom_partner]

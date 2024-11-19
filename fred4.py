@@ -12,7 +12,6 @@ import argparse
 import os
 import re
 import json
-
 import parmed
 
 from mods.func_prompt_io import *
@@ -31,8 +30,6 @@ DEFAULT_AJF_CONFIG = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.json")
 
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
-RE_DIGIT = re.compile(r"[\d\s]+")
-RE_CONNECT = re.compile(r'^\d+-\d+$')
 
 
 
@@ -203,6 +200,8 @@ if __name__ == '__main__':
 		file_reference = RE_QUOTE_T.sub("", file_reference)
 		if args.PDB_FILE is not None:
 			file_reference = args.PDB_FILE
+
+		check_exist(file_reference, 2)
 		check_electrons(obj_fred.fragments, file_reference)
 
 		if args.FLAG_OVERWRITE == False:
