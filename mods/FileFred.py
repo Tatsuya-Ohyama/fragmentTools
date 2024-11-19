@@ -313,7 +313,7 @@ class FileFred:
 				))
 			obj_output.write("\n")
 
-			obj_output.write("<< connections (ex. \"Next_fragment_atom   Prev_fragment_atom\") >>\n")
+			obj_output.write("<< connections >>\n")
 			for obj_fragment in self._fragments:
 				list_connections = obj_fragment.get_connections()
 				if len(list_connections) == 0:

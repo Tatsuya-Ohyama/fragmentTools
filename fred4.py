@@ -56,7 +56,7 @@ def check_electrons(list_obj_fragments, pdb_file):
 				electron_atom = element_table[atom_i]
 				electron_fragment += electron_atom
 			except ValueError:
-				sys.stderr.write("ERROR: atom index `{0}` is not found in list.\n".format(atom_i))
+				sys.stderr.write("ERROR: Atom index `{0}` is not found in list.\n".format(atom_i))
 				sys.exit(1)
 
 		electron_fragment += (-1 * obj_fragment.charge)

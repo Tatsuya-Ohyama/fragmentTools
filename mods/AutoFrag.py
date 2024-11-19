@@ -39,6 +39,9 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 		sys.exit(1)
 
 	obj_mol = parmed.load_file(structure_file)
+	if obj_mol.atoms[-1].idx+1 != obj_mol.atoms[-1].number:
+		sys.stderr.write("WARNING: The index of atoms in the PDB file does not match the index by number of atoms.\n         The output file is indexed by number of atoms.\n")
+
 	list_obj_fragments = [[FragmentData().set_atoms(list(obj_residue.atoms))] for obj_residue in obj_mol.residues]
 	list_atom_info = {obj_atom: None for obj_atom in obj_mol.atoms}
 	list_obj_atom_shift = [[] for obj_residue in obj_mol.residues]
@@ -169,7 +172,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				if frag_i+1 >= len(list_obj_atom_shift):
 					# end of shift atom
 					if len(list_shift_atoms) != 0:
-						sys.stderr.write("ERROR: algorithm error in amino fragmentation. Please report to developer.\n")
+						sys.stderr.write("ERROR: Algorithm error in amino fragmentation. Please report to developer.\n")
 						sys.exit(1)
 					continue
 				list_obj_atom_shift[frag_i+1] = list_shift_atoms
