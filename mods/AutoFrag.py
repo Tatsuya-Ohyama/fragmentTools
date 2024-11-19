@@ -79,19 +79,23 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				term_type = "S"
 
 			elif len(list_bond_partners) == 1:
-				# terminal
-				obj_atom_partner = list_bond_partners.pop()
+				# bond with one residue -> terminal
+				obj_atom_partner = list_bond_partners.pop().pop()
 				if frag_i == 0:
-					# N-terminal
+					# N-terminal (first fragment)
 					term_type = "N"
 					obj_atom_N = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "N"][0]
 					list_obj_atom_H = [obj_atom for obj_atom in obj_atom_N.bond_partners if obj_atom.element == 1]
 					if len(list_obj_atom_H) == 3:
-						charge += 1
+						list_obj_fragments[frag_i][0].add_charge(1)
 
-				elif obj_atom_partner in obj_mol.residues[frag_i-1].atoms:
-					# N-terminal
+				elif obj_atom_partner not in obj_mol.residues[frag_i-1].atoms:
+					# N-terminal (not connected previous residue)
 					term_type = "N"
+					obj_atom_N = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "N"][0]
+					list_obj_atom_H = [obj_atom for obj_atom in obj_atom_N.bond_partners if obj_atom.element == 1]
+					if len(list_obj_atom_H) == 3:
+						list_obj_fragments[frag_i][0].add_charge(1)
 
 				else:
 					# C-terminal
@@ -101,7 +105,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					list_bond_partners_O = [set(obj_atom.bond_partners) - set([obj_atom_C]) for obj_atom in list_obj_atom_O]
 					list_bond_partners_O = [v for v in list_bond_partners_O if len(v) != 0]
 					if len(list_bond_partners_O) == 0:
-						charge += -1
+						list_obj_fragments[frag_i][0].add_charge(-1)
 
 			if sep_amino.startswith("+"):
 				# add fragment information
@@ -112,7 +116,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				# add fragment information
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
-				list_obj_fragments[frag_i].append(FragmentData())	# for side chain
+				list_obj_fragments[frag_i].append(FragmentData())	# add side chain fragment
 				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
 				list_obj_fragments[frag_i][1].add_charge(charge)
 
@@ -120,7 +124,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				list_main_chain = []
 				list_side_chain = []
 				for obj_atom in list_obj_fragments[frag_i][0].atoms:
-					if obj_residue.name == "GLY":
+					if obj_residue.name in ["GLY", "PRO"]:
 						# do not separate side chain for GLY
 						list_main_chain.append(obj_atom)
 
@@ -189,7 +193,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				# add fragment information
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
-				list_obj_fragments[frag_i].append(FragmentData())
+				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
 				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
 				list_obj_fragments[frag_i][1].add_charge(0)
 
@@ -212,10 +216,10 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				# add fragment information
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
-				list_obj_fragments[frag_i].append(FragmentData())
+				list_obj_fragments[frag_i].append(FragmentData())	# add sugar fragment
 				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
 				list_obj_fragments[frag_i][1].add_charge(0)
-				list_obj_fragments[frag_i].append(FragmentData())
+				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
 				list_obj_fragments[frag_i][2].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
 				list_obj_fragments[frag_i][2].add_charge(0)
 
@@ -309,6 +313,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 
 	# make connection and bda information
+	# BDA = atom in negative charged fragment; BAA = atom in positive charged fragment
 	for obj_fragment in list_obj_fragments:
 		list_connections = []
 		list_obj_atom_member = set(obj_fragment.atoms)
@@ -316,7 +321,27 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			list_obj_atom_partners = set(obj_atom.bond_partners) - list_obj_atom_member
 			for obj_atom_partner in list_obj_atom_partners:
 				obj_fragment_partner = list_atom_info[obj_atom_partner]
-				if obj_fragment_partner.index > obj_fragment.index:
+
+				is_bda = False
+				if obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Backbone") and obj_fragment.index < obj_fragment_partner.index:
+					is_bda = True
+
+				elif obj_fragment.type.endswith("Sidechain") and obj_fragment_partner.type.endswith("Backbone"):
+					is_bda = True
+
+				elif obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Base"):
+					is_bda = True
+
+				elif obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Sugar") and obj_fragment.index < obj_fragment_partner.index:
+					is_bda = True
+
+				elif obj_fragment.type.endswith("Sugar") and obj_fragment_partner.type.endswith("Backbone") and obj_fragment.index < obj_fragment_partner.index:
+					is_bda = True
+
+				elif obj_fragment.type.endswith("Sugar") and obj_fragment_partner.type.endswith("Base"):
+					is_bda = True
+
+				if is_bda:
 					obj_fragment_partner.append_connection([obj_atom, obj_atom_partner])
 					obj_fragment_partner.add_bda(1)
 					obj_fragment.add_charge(1)

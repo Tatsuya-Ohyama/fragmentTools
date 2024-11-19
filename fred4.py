@@ -62,7 +62,7 @@ def check_electrons(list_obj_fragments, pdb_file):
 		electron_fragment += (-1 * obj_fragment.charge)
 		if electron_fragment % 2 != 0:
 			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n")
-			sys.stderr.write("       The number of electrons in fragment No. {0} is {1}.\n".format(fragment_idx, electron_fragment))
+			sys.stderr.write("       The number of electrons in fragment No. {0} is {1}.\n".format(obj_fragment.index, electron_fragment))
 			flag_error = True
 
 	if flag_error:
