@@ -314,7 +314,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			for obj_atom_partner in list_obj_atom_partners:
 				obj_fragment_partner = list_atom_info[obj_atom_partner]
 				if obj_fragment_partner.index > obj_fragment.index:
-					obj_fragment_partner.append_connection([obj_atom_partner, obj_atom])
+					obj_fragment_partner.append_connection([obj_atom, obj_atom_partner])
 					obj_fragment_partner.add_bda(1)
 					obj_fragment.add_charge(1)
 					obj_fragment_partner.add_charge(-1)
