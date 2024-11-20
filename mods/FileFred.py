@@ -303,7 +303,7 @@ class FileFred:
 			self
 		"""
 		with open(output_file, "w") as obj_output:
-			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
+			obj_output.write("  FNo.  | Charge | BAA | Atoms of fragment\n")
 			for idx, obj_fragment in enumerate(self._fragments, 1):
 				obj_fragment.set_index(idx)
 				obj_output.write("{0:>7} |{1:>5}   |{2:>3}  | {3}\n".format(
