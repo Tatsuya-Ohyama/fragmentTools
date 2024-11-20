@@ -47,7 +47,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 	list_obj_fragments = [[FragmentData().set_atoms(list(obj_residue.atoms))] for obj_residue in obj_mol.residues]
 	list_atom_info = {obj_atom: None for obj_atom in obj_mol.atoms}
-	list_obj_atom_shift = [[] for obj_residue in obj_mol.residues]
+	list_obj_atom_shift = [[[]] for obj_residue in obj_mol.residues]
 	for frag_i, obj_residue in enumerate(obj_mol.residues):
 		res_type = None
 		for res_type_ref, list_resnames in RESIDUE_TYPES.items():
@@ -111,15 +111,16 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 						list_obj_fragments[frag_i][0].add_charge(-1)
 
 			if sep_amino.startswith("+"):
-				# add fragment information
+				# prepare fragment
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(charge)
 
 			elif sep_amino.startswith("/"):
-				# add fragment information
+				# prepare fragment
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
 				list_obj_fragments[frag_i].append(FragmentData())	# add side chain fragment
+				list_obj_atom_shift[frag_i].append([])
 				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
 				list_obj_fragments[frag_i][1].add_charge(charge)
 
@@ -178,7 +179,7 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
 				if len(list_shift_atoms) != 0:
 					if frag_i+1 < len(list_obj_atom_shift):
-						list_obj_atom_shift[frag_i+1] = list_shift_atoms
+						list_obj_atom_shift[frag_i+1][0].extend(list_shift_atoms)
 
 					else:
 						# end of shift atom
@@ -214,41 +215,88 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					term_type = "3"
 
 			if sep_nuc == "+base":
-				# add fragment information
+				# prepare fragment
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
 
+				# shift atoms in main chains
+				list_remain_atoms = []
+				list_shift_atoms = []
+				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+						list_shift_atoms.append(obj_atom)
+
+					else:
+						list_remain_atoms.append(obj_atom)
+
+				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if 0 < frag_i:
+						list_obj_atom_shift[frag_i-1][0].extend(list_shift_atoms)
+						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
+							list_obj_fragments[frag_i-1][0].add_charge(-1)
+
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in nucleic acid fragmentation (+base). Please report to developer.\n")
+						sys.exit(1)
+
 			elif sep_nuc == "/base":
-				# add fragment information
+				# prepare fragment
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
 				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
+				list_obj_atom_shift[frag_i].append([])
 				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
 				list_obj_fragments[frag_i][1].add_charge(0)
 
 				# separate into backbone and base
-				list_main_chain = []
-				list_side_chain = []
+				list_backbone = []
+				list_base = []
 				for obj_atom in list_obj_fragments[frag_i][0].atoms:
-					if "'" in obj_atom.name or obj_atom.name in ["H5T", "H3T"]:
+					if "'" in obj_atom.name or obj_atom.name in ["P", "O1P", "OP1", "O2P", "OP2", "HO5", "HO3", "H5T", "H3T"]:
 						# main chain
-						list_main_chain.append(obj_atom)
+						list_backbone.append(obj_atom)
 
 					else:
-						# side chain
-						list_side_chain.append(obj_atom)
+						# base
+						list_base.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_main_chain)
-				list_obj_fragments[frag_i][1].set_atoms(list_side_chain)
+				list_obj_fragments[frag_i][0].set_atoms(list_backbone)
+				list_obj_fragments[frag_i][1].set_atoms(list_base)
+
+				# shift atoms in main chains
+				list_remain_atoms = []
+				list_shift_atoms = []
+				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+						list_shift_atoms.append(obj_atom)
+
+					else:
+						list_remain_atoms.append(obj_atom)
+
+				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if 0 < frag_i:
+						list_obj_atom_shift[frag_i-1][0].extend(list_shift_atoms)
+						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
+							list_obj_fragments[frag_i-1][0].add_charge(-1)
+
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in nucleic acid fragmentation (/base). Please report to developer.\n")
+						sys.exit(1)
 
 			elif sep_nuc == "/sugar":
-				# add fragment information
+				# prepare fragment
 				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
 				list_obj_fragments[frag_i][0].add_charge(0)
 				list_obj_fragments[frag_i].append(FragmentData())	# add sugar fragment
+				list_obj_atom_shift[frag_i].append([])
 				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
 				list_obj_fragments[frag_i][1].add_charge(0)
 				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
+				list_obj_atom_shift[frag_i].append([])
 				list_obj_fragments[frag_i][2].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
 				list_obj_fragments[frag_i][2].add_charge(0)
 
@@ -257,20 +305,11 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				list_sugar = []
 				list_base = []
 				for obj_atom in list_obj_fragments[frag_i][0].atoms:
-					if not obj_atom.residue.name.endswith("5") and obj_atom.name in ["H5T", "P", "O1P", "OP1", "O2P", "OP2", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
+					if obj_atom.name in ["P", "O1P", "OP1", "O2P", "OP2", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
 						# main chain (phosphate)
 						list_backbone.append(obj_atom)
-						if obj_atom.name == "P":
-							list_obj_fragments[frag_i][0].add_charge(-1)
 
-					elif obj_atom.name == "O3'" and not obj_atom.residue.name.endswith("3"):
-						if len(list_obj_fragments[frag_i+1]) == 0:
-							list_obj_fragments[frag_i+1].append(FragmentData())
-							list_obj_fragments[frag_i+1][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-						list_obj_fragments[frag_i+1][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_obj_fragments[frag_i+1][0]
-
-					elif "'" in obj_atom.name or obj_atom.name in ["H3T", "H5T"]:
+					elif "'" in obj_atom.name or obj_atom.name in ["H5T", "HO5", "H3T", "HO3"]:
 						# sugar
 						list_sugar.append(obj_atom)
 
@@ -282,26 +321,27 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				list_obj_fragments[frag_i][1].set_atoms(list_sugar)
 				list_obj_fragments[frag_i][2].set_atoms(list_base)
 
-			# shift atoms in main chains
-			list_remain_atoms = []
-			list_shift_atoms = []
-			for obj_atom in list_obj_fragments[frag_i][0].atoms:
-				if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
-					list_shift_atoms.append(obj_atom)
+				# shift atoms in main chains
+				list_remain_atoms = []
+				list_shift_atoms = []
+				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+						list_shift_atoms.append(obj_atom)
 
-				else:
-					list_remain_atoms.append(obj_atom)
+					else:
+						list_remain_atoms.append(obj_atom)
 
-			list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
-			if len(list_shift_atoms) != 0:
-				if 0 < frag_i:
-					list_obj_atom_shift[frag_i-1] = list_shift_atoms
-					list_obj_fragments[frag_i-1][0].add_charge(-1)
+				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if 0 < frag_i:
+						list_obj_atom_shift[frag_i-1][1].extend(list_shift_atoms)
+						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
+							list_obj_fragments[frag_i-1][1].add_charge(-1)
 
-				else:
-					# end of shift atom
-					sys.stderr.write("ERROR: Algorithm error in amino acid fragmentation. Please report to developer.\n")
-					sys.exit(1)
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in nucleic acid fragmentation (/sugar). Please report to developer.\n")
+						sys.exit(1)
 			continue
 
 
@@ -334,8 +374,9 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 
 	# update shift atoms
-	for list_fragment, list_obj_atom in zip(list_obj_fragments, list_obj_atom_shift):
-		list_fragment[0].set_atoms(list_fragment[0].atoms + list_obj_atom)
+	for list_obj_fragments1, list_obj_atom_shift1 in zip(list_obj_fragments, list_obj_atom_shift):
+		for obj_fragment, list_atom in zip(list_obj_fragments1, list_obj_atom_shift1):
+			obj_fragment.set_atoms(obj_fragment.atoms + list_atom)
 
 	# flatten fragment list
 	list_obj_fragments = [v2 for v1 in list_obj_fragments for v2 in v1 if len(v2.atoms) != 0]
@@ -359,23 +400,29 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			for obj_atom_partner in list_obj_atom_partners:
 				obj_fragment_partner = list_atom_info[obj_atom_partner]
 
+				# left: BDA (+1) / right: BAA (-1)
 				is_bda = False
 				if obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Backbone") and obj_fragment.index < obj_fragment_partner.index:
+					print("Backbone - Backbone", obj_fragment.index, obj_fragment_partner.index)
 					is_bda = True
 
 				elif obj_fragment.type.endswith("Sidechain") and obj_fragment_partner.type.endswith("Backbone"):
 					is_bda = True
 
 				elif obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Base"):
+					print("Backbone - Base", obj_fragment.index, obj_fragment_partner.index)
 					is_bda = True
 
 				elif obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Sugar") and obj_fragment.index < obj_fragment_partner.index:
+					print("Backbone - Sugar", obj_fragment.index, obj_fragment_partner.index)
 					is_bda = True
 
 				elif obj_fragment.type.endswith("Sugar") and obj_fragment_partner.type.endswith("Backbone") and obj_fragment.index < obj_fragment_partner.index:
+					print("Sugar - Backbone", obj_fragment.index, obj_fragment_partner.index)
 					is_bda = True
 
 				elif obj_fragment.type.endswith("Sugar") and obj_fragment_partner.type.endswith("Base"):
+					print("Sugar - Base", obj_fragment.index, obj_fragment_partner.index)
 					is_bda = True
 
 				if is_bda:
