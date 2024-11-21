@@ -16,6 +16,7 @@ RESIDUE_TYPES = {
 	"Water": ["SOL", "WAT", "HOH"],
 	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn"]
 }
+DEBUG_MODE = False
 
 
 
@@ -110,24 +111,26 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					if len(list_bond_partners_O) == 0:
 						list_obj_fragments[frag_i][0].add_charge(-1)
 
+			obj_fragment_backbone = list_obj_fragments[frag_i][0]
+			obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
 			if sep_amino.startswith("+"):
 				# prepare fragment
-				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-				list_obj_fragments[frag_i][0].add_charge(charge)
+				obj_fragment_backbone.add_charge(charge)
 
 			elif sep_amino.startswith("/"):
 				# prepare fragment
-				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-				list_obj_fragments[frag_i][0].add_charge(0)
-				list_obj_fragments[frag_i].append(FragmentData())	# add side chain fragment
+				obj_fragment_backbone.add_charge(0)
+
 				list_obj_atom_shift[frag_i].append([])
-				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
-				list_obj_fragments[frag_i][1].add_charge(charge)
+				list_obj_fragments[frag_i].append(FragmentData())	# add side chain fragment
+				obj_fragment_sidechain = list_obj_fragments[frag_i][1]
+				obj_fragment_sidechain.set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
+				obj_fragment_sidechain.add_charge(charge)
 
 				# separate into side chain
 				list_main_chain = []
 				list_side_chain = []
-				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+				for obj_atom in obj_fragment_backbone.atoms:
 					if obj_residue.name in ["GLY", "PRO"]:
 						# do not separate side chain for GLY
 						list_main_chain.append(obj_atom)
@@ -160,15 +163,16 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					else:
 						list_side_chain.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_main_chain)
-				list_obj_fragments[frag_i][1].set_atoms(list_side_chain)
+				obj_fragment_backbone.set_atoms(list_main_chain)
+				obj_fragment_sidechain.set_atoms(list_side_chain)
 
 
 			if sep_amino in ["+amino", "/amino"]:
 				# shift atoms in main chain fragments
 				list_remain_atoms = []
 				list_shift_atoms = []
-				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
 					if obj_atom.name in ["C", "O"] and term_type != "C":
 						# shift to next fragment
 						list_shift_atoms.append(obj_atom)
@@ -176,10 +180,10 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 					else:
 						list_remain_atoms.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
 				if len(list_shift_atoms) != 0:
 					if frag_i+1 < len(list_obj_atom_shift):
-						list_obj_atom_shift[frag_i+1][0].extend(list_shift_atoms)
+						list_obj_atom_shift[frag_i+1][shift_frag_idx].extend(list_shift_atoms)
 
 					else:
 						# end of shift atom
@@ -216,25 +220,27 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 			if sep_nuc == "+base":
 				# prepare fragment
-				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-				list_obj_fragments[frag_i][0].add_charge(0)
+				obj_fragment_backbone = list_obj_fragments[frag_i][0]
+				obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
+				obj_fragment_backbone.add_charge(0)
 
 				# shift atoms in main chains
 				list_remain_atoms = []
 				list_shift_atoms = []
-				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
 					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
 						list_shift_atoms.append(obj_atom)
 
 					else:
 						list_remain_atoms.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
 				if len(list_shift_atoms) != 0:
 					if 0 < frag_i:
-						list_obj_atom_shift[frag_i-1][0].extend(list_shift_atoms)
+						list_obj_atom_shift[frag_i-1][shift_frag_idx].extend(list_shift_atoms)
 						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
-							list_obj_fragments[frag_i-1][0].add_charge(-1)
+							list_obj_fragments[frag_i-1][shift_frag_idx].add_charge(-1)
 
 					else:
 						# end of shift atom
@@ -243,17 +249,25 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 			elif sep_nuc == "/base":
 				# prepare fragment
-				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-				list_obj_fragments[frag_i][0].add_charge(0)
-				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
+				obj_fragment_backbone = list_obj_fragments[frag_i][0]
+				obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
+				obj_fragment_backbone.add_charge(0)
+
 				list_obj_atom_shift[frag_i].append([])
-				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
-				list_obj_fragments[frag_i][1].add_charge(0)
+				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
+				obj_fragment_base = list_obj_fragments[frag_i][1]
+				obj_fragment_base.set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
+				obj_fragment_base.add_charge(0)
+
+				if DEBUG_MODE:
+					# the same as order of autofrag in ABINIT-MP
+					list_obj_fragments[frag_i][0] = obj_fragment_base
+					list_obj_fragments[frag_i][1] = obj_fragment_backbone
 
 				# separate into backbone and base
 				list_backbone = []
 				list_base = []
-				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+				for obj_atom in obj_fragment_backbone.atoms:
 					if "'" in obj_atom.name or obj_atom.name in ["P", "O1P", "OP1", "O2P", "OP2", "HO5", "HO3", "H5T", "H3T"]:
 						# main chain
 						list_backbone.append(obj_atom)
@@ -262,25 +276,26 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 						# base
 						list_base.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_backbone)
-				list_obj_fragments[frag_i][1].set_atoms(list_base)
+				obj_fragment_backbone.set_atoms(list_backbone)
+				obj_fragment_base.set_atoms(list_base)
 
 				# shift atoms in main chains
 				list_remain_atoms = []
 				list_shift_atoms = []
-				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
 					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
 						list_shift_atoms.append(obj_atom)
 
 					else:
 						list_remain_atoms.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_remain_atoms)
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
 				if len(list_shift_atoms) != 0:
 					if 0 < frag_i:
-						list_obj_atom_shift[frag_i-1][0].extend(list_shift_atoms)
+						list_obj_atom_shift[frag_i-1][shift_frag_idx].extend(list_shift_atoms)
 						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
-							list_obj_fragments[frag_i-1][0].add_charge(-1)
+							list_obj_fragments[frag_i-1][shift_frag_idx].add_charge(-1)
 
 					else:
 						# end of shift atom
@@ -289,22 +304,33 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 
 			elif sep_nuc == "/sugar":
 				# prepare fragment
-				list_obj_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-				list_obj_fragments[frag_i][0].add_charge(0)
+				obj_fragment_sugar = list_obj_fragments[frag_i][0]
+				obj_fragment_sugar.set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
+				obj_fragment_sugar.add_charge(0)
+
+				list_obj_atom_shift[frag_i].append([])
 				list_obj_fragments[frag_i].append(FragmentData())	# add sugar fragment
+				obj_fragment_base = list_obj_fragments[frag_i][1]
+				obj_fragment_base.set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
+				obj_fragment_base.add_charge(0)
+
 				list_obj_atom_shift[frag_i].append([])
-				list_obj_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
-				list_obj_fragments[frag_i][1].add_charge(0)
 				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
-				list_obj_atom_shift[frag_i].append([])
-				list_obj_fragments[frag_i][2].set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
-				list_obj_fragments[frag_i][2].add_charge(0)
+				obj_fragment_backbone = list_obj_fragments[frag_i][2]
+				obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
+				obj_fragment_backbone.add_charge(0)
+
+				if DEBUG_MODE:
+					# the same as order of autofrag in ABINIT-MP
+					list_obj_fragments[frag_i][0] = obj_fragment_base
+					list_obj_fragments[frag_i][1] = obj_fragment_sugar
+					list_obj_fragments[frag_i][2] = obj_fragment_backbone
 
 				# separate into backbone, sugar, and base
 				list_phosphate = []
 				list_sugar = []
 				list_base = []
-				for obj_atom in list_obj_fragments[frag_i][0].atoms:
+				for obj_atom in obj_fragment_sugar.atoms:
 					if obj_atom.name in ["O3'", "P", "O1P", "OP1", "O2P", "OP2", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
 						# main chain (phosphate)
 						if term_type == "5" and obj_atom.name in ["O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
@@ -324,26 +350,27 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 						# base
 						list_base.append(obj_atom)
 
-				list_obj_fragments[frag_i][0].set_atoms(list_sugar)
-				list_obj_fragments[frag_i][1].set_atoms(list_base)
-				list_obj_fragments[frag_i][2].set_atoms(list_phosphate)
+				obj_fragment_sugar.set_atoms(list_sugar)
+				obj_fragment_base.set_atoms(list_base)
+				obj_fragment_backbone.set_atoms(list_phosphate)
 
 				# shift atoms in main chains (phosphate fragment)
 				list_remain_atoms = []
 				list_shift_atoms = []
-				for obj_atom in list_obj_fragments[frag_i][2].atoms:
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
 					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
 						list_shift_atoms.append(obj_atom)
 
 					else:
 						list_remain_atoms.append(obj_atom)
 
-				list_obj_fragments[frag_i][2].set_atoms(list_remain_atoms)
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
 				if len(list_shift_atoms) != 0:
 					if 0 < frag_i:
-						list_obj_atom_shift[frag_i-1][2].extend(list_shift_atoms)
+						list_obj_atom_shift[frag_i-1][shift_frag_idx].extend(list_shift_atoms)
 						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
-							list_obj_fragments[frag_i-1][2].add_charge(-1)
+							list_obj_fragments[frag_i-1][shift_frag_idx].add_charge(-1)
 
 					else:
 						# end of shift atom
