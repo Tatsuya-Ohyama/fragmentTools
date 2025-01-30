@@ -11,7 +11,7 @@ from mods.FragmentData import FragmentData
 
 # =============== Constant =============== #
 RESIDUE_TYPES = {
-	"AminoAcid": ["ACE", "ALA", "ARG", "ASN", "ASP", "CYS", "CYM", "GLN", "GLU", "GLH", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"],
+	"AminoAcid": ["ACE", "ALA", "ARG", "ASH", "ASN", "ASP", "CYS", "CYM", "CYX", "GLH", "GLN", "GLU", "GLH", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYN", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYM", "TYR", "VAL"],
 	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "DNA_base"],
 	"Water": ["SOL", "WAT", "HOH"],
 	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn"]
@@ -62,10 +62,10 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			if obj_residue.name in ["LYS", "ARG", "HIP", "SYM"]:
 				charge = 1
 
-			elif obj_residue.name in ["ASP", "GLU"]:
+			elif obj_residue.name in ["ASP", "GLU", "TYM"]:
 				charge = -1
 
-			elif obj_residue.name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
+			elif obj_residue.name in ["ACE", "ALA", "ASH", "ASN", "CYS", "CYX", "GLH", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "LYN", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
 				charge = 0
 
 			else:
@@ -85,7 +85,15 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			elif len(list_bond_partners) == 1:
 				# bond with one residue -> terminal
 				obj_atom_partner = list_bond_partners.pop().pop()
-				if frag_i == 0:
+				if obj_residue.name == "ACE":
+					term_type = "N"
+					list_obj_fragments[frag_i][0].add_charge(0)
+
+				elif obj_residue.name == "NME":
+					term_type = "C"
+					list_obj_fragments[frag_i][0].add_charge(0)
+
+				elif frag_i == 0:
 					# N-terminal (first fragment)
 					term_type = "N"
 					obj_atom_N = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "N"][0]
@@ -383,13 +391,17 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 			list_obj_fragments[frag_i][0].set_type("{}".format(res_type))
 			list_obj_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
 			list_obj_fragments[frag_i][0].add_charge(0)
-			list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
+			for obj_atom in obj_residue.atoms:
+				list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
 			continue
 
 		if res_type == "Ion":
 			list_obj_fragments[frag_i][0].set_type("{}".format(res_type))
 			list_obj_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
 			list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
+			for obj_atom in obj_residue.atoms:
+				list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
+
 			if obj_atom.element in [3, 11, 19, 37]:
 				list_obj_fragments[frag_i][0].add_charge(1)
 
@@ -404,6 +416,8 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 		# Ligand
 		list_obj_fragments[frag_i][0].set_type("{}".format("Ligand"))
 		list_obj_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
+		for obj_atom in obj_residue.atoms:
+			list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
 		list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
 
 
