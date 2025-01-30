@@ -192,6 +192,10 @@ Copyright (c) 2021 Tatsuya Ohyama
 
 
 ## ChangeLog
+### Ver. 14.0 (2025-01-30)
+* autofrag モードで、ACE や NME のキャップされた残基に対応した。
+* autofrag モードで、電荷が特殊なアミノ酸残基に対応した。
+
 ### Ver. 13.0 (2024-11-19)
 * `autofrag.py` を parmed を使った仕様に変更した。
 * fred4.py に `autofrag.py` を `autofrag` モードとして統合し、`autofrag.py` を廃止した。

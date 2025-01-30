@@ -32,7 +32,7 @@ DEFAULT_AJF_CONFIG = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.json")
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
 
-VERSION = "13.0"
+VERSION = "14.0"
 
 
 
