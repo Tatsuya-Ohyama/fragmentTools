@@ -12,6 +12,7 @@ import argparse
 import os
 import re
 import json
+import parmed
 
 from mods.func_prompt_io import *
 from mods.FileAJF import FileAJF
@@ -19,6 +20,7 @@ from mods.FileFred import FileFred
 from mods.MoleculeInformation import MoleculeInformation
 from mods.func_string import target_range
 from mods.AutoFrag import fragmentation
+from mods.WriteFrag import write_frag
 
 
 
@@ -29,17 +31,8 @@ DEFAULT_AJF_CONFIG = os.path.join(PROGRAM_ROOT, "template", "autofrag_m.json")
 
 RE_QUOTE_H = re.compile(r"^['\"]")
 RE_QUOTE_T = re.compile(r"['\"]$")
-RE_DIGIT = re.compile(r"[\d\s]+")
-RE_CONNECT = re.compile(r'^\d+-\d+$')
 
-ATOM_ELECTRON = {
-	"H": 1, "Li": 3, "Be": 4, "B": 5,
-	"C": 6, "N": 7, "O": 8, "F": 9,
-	"Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15,
-	"S": 16, "Cl": 17, "K": 19, "Ca": 20,
-	"Fe": 26, "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30,
-	"Br": 35
-}
+VERSION = "13.0"
 
 
 
@@ -52,42 +45,24 @@ def check_electrons(list_obj_fragments, pdb_file):
 		fragment_members (list): fragment information
 		pdb_file (str): .pdb file
 	"""
-	element_table = {}
-
-	# get atom_index and element
-	with open(pdb_file, "r") as obj_input:
-		for line_val in obj_input:
-			if line_val.startswith("ATOM") or line_val.startswith("HETATM"):
-				atom_idx = int(line_val[6:11].strip())
-				element = RE_DIGIT.sub("", line_val[12:14].strip())
-				element = RE_QUOTE_H.sub("", element)
-				element = RE_QUOTE_T.sub("", element)
-				if element in ["HO", "HH"]:
-					element = "H"
-
-				element_table[atom_idx] = element
-				if not element in ATOM_ELECTRON:
-					sys.stderr.write("ERROR: Unknown atomtype ({0}). Skipped...\n".format(element))
+	obj_mol = parmed.load_file(pdb_file)
+	element_table = {obj_atom.idx+1: obj_atom.element for obj_atom in obj_mol.atoms}
 
 	flag_error = False
-	for fragment_idx, obj_fragment in enumerate(list_obj_fragments, 1):
+	for obj_fragment in list_obj_fragments:
 		electron_fragment = 0
 		for atom_i in obj_fragment.atoms:
 			try:
-				electron_atom = ATOM_ELECTRON[element_table[atom_i]]
-				# print(electron_atom)
+				electron_atom = element_table[atom_i]
 				electron_fragment += electron_atom
 			except ValueError:
-				sys.stderr.write("ERROR: atom index `{0}` is not found in list.\n".format(atom_i))
+				sys.stderr.write("ERROR: Atom index `{0}` is not found in list.\n".format(atom_i))
 				sys.exit(1)
-		# print(electron_fragment)
 
 		electron_fragment += (-1 * obj_fragment.charge)
-		# print(electron_fragment)
-		# sys.stdin.readline()
 		if electron_fragment % 2 != 0:
 			sys.stderr.write("ERROR: Invalid number of fragment electrons.\n")
-			sys.stderr.write("       The number of electrons in fragment No. {0} is {1}.\n".format(fragment_idx, electron_fragment))
+			sys.stderr.write("       The number of electrons in fragment No. {0} is {1}.\n".format(obj_fragment.index, electron_fragment))
 			flag_error = True
 
 	if flag_error:
@@ -105,7 +80,7 @@ def check_electrons(list_obj_fragments, pdb_file):
 # =============== main =============== #
 if __name__ == '__main__':
 	try:
-		parser = argparse.ArgumentParser(description="Fragment editor for mizuho ABINIT-MP", formatter_class=argparse.RawTextHelpFormatter)
+		parser = argparse.ArgumentParser(description="Fragment editor for ABINIT-MP.\nVersion: {}".format(VERSION), formatter_class=argparse.RawTextHelpFormatter)
 
 		subparser = parser.add_subparsers(help="subcommand")
 		subparser.required = True
@@ -149,12 +124,17 @@ if __name__ == '__main__':
 		parser_editfrag.add_argument("-c", dest="CONNECTION_LIST", metavar = "ATOM1-ATOM2", nargs = "+", required=True, help = "connection list described by Ambermask (Ex: :EG@C9-:EG@C10  34-25)")
 		parser_editfrag.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite_forcibly")
 
+		parser_writefrag = subparser.add_parser("writefrag", help="Write each fragment structure")
+		parser_writefrag.set_defaults(func="writefrag")
+		parser_writefrag.add_argument("-i", dest="INPUT_FILE", metavar="INPUT.fred", required=True, help="fred file")
+		parser_writefrag.add_argument("-p", dest="STRUCTURE_FILE", metavar="STRUCTURE.pdb", required=True, help="system structure file")
+		parser_writefrag.add_argument("-o", dest="OUTPUT_PREFIX", metavar="OUTPUT_PREFIX", required=True, help="output prefix")
+
 		args = parser.parse_args()
 
 	except TypeError:
-		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag)\n")
+		sys.stderr.write("ERROR: No sub-command (autofrag | edit | rewrite | output | editfrag | writefrag)\n")
 		sys.exit(1)
-
 
 	check_exist(args.INPUT_FILE, 2)
 
@@ -175,7 +155,7 @@ if __name__ == '__main__':
 		parameters["&FMOCNTRL"]["FragSizeNucleotide"] = "'{}'".format(args.FRAGMENT_NUCLEIC)
 		obj_fred.set_parameters(parameters)
 		obj_fred.set_n_atom(sum([len(obj_fragment.atoms) for obj_fragment in list_fragments]))
-		obj_fred.set_charge(sum([obj_fragment.charge for obj_fragment in list_fragments]))
+		obj_fred.set_charge(sum([0 if obj_fragment.charge is None else obj_fragment.charge for obj_fragment in list_fragments]))
 		obj_fred.set_fragments(list_fragments)
 		obj_fred.write(args.OUTPUT_FILE)
 
@@ -228,6 +208,8 @@ if __name__ == '__main__':
 		file_reference = RE_QUOTE_T.sub("", file_reference)
 		if args.PDB_FILE is not None:
 			file_reference = args.PDB_FILE
+
+		check_exist(file_reference, 2)
 		check_electrons(obj_fred.fragments, file_reference)
 
 		if args.FLAG_OVERWRITE == False:
@@ -292,3 +274,14 @@ if __name__ == '__main__':
 		if args.FLAG_OVERWRITE == False:
 			check_overwrite(args.OUTPUT_FILE)
 		obj_fred.write(args.OUTPUT_FILE)
+
+
+	elif args.func == "writefrag":
+		check_exist(args.STRUCTURE_FILE, 2)
+
+		obj_fred = FileFred().read(args.INPUT_FILE)
+		list_obj_fragments = obj_fred.fragments
+
+		obj_mol = parmed.load_file(args.STRUCTURE_FILE)
+
+		write_frag(args.OUTPUT_PREFIX, list_obj_fragments, obj_mol)

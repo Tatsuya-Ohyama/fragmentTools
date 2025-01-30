@@ -7,7 +7,8 @@ ABINIT-MP による FMO 計算で、手動フラグメント分割をサポー�
 ## ツール群
 * `fred4.py`
 	: .ajf → .fred 間、.fred → .fred 間、.fred → .ajf 間でファイルを相互変換するプログラム。
-	: `edit`、`rewrite`、`output`、`autofrag`、`editfrag` の 5 つの機能を持つ。
+	* `autofrag`
+		: .pdb ファイルを基にフラグメント分割をして、.fred ファイルに出力する。
 	* `edit`
 		: .ajf → .fred の変換をする。
 	* `rewrite`
@@ -18,35 +19,30 @@ ABINIT-MP による FMO 計算で、手動フラグメント分割をサポー�
 		: `autofrag.py` の機能
 	* `editfrag`
 		: `editfrag.py` の機能
-* `autofrag.py`
-	: PDB ファイルから、自動でフラグメントを分割するプログラム。
 * `editfrag.py`
 	: フラグメント情報を構造を与えてフラグメントを編集する。
 	: 複数の分子に対して同じフラグメント分割をする。
 
 
 ## 使用方法
-### autofrag.py
+### fred4.py
+#### autofrag mode
 ```sh
-$ autofrag.py [-h] -i INPUT.pdb -o OUTPUT.fred [-S] -V VERSION [-O]
+$ fred4.py autofrag [-h] -p INPUT.pdb -o OUTPUT.fred [-sp FRAGMENT_OPTION_PROTEIN] [-sn FRAGMENT_OPTION_NUCLEIC] [-O]
 ```
 
-* `-i INPUT.pdb`:
-	: フラグメント分割をする PDB ファイル
+* `-p INPUT.pdb`
+	: .pdb ファイル (入力)
 * `-o OUTPUT.fred`
-	: 人間可読な編集ファイルの出力先
-* `-S`
-	: DNA をリン酸基と分割するかどうか (デフォルト: OFF)
-* `-V VERSION`:
-	: .ajf ファイルのバージョンか、テンプレートファイル
-	* `3`: ABINIT-MP 3
-	* `5`: ABINIT-MP 5 or later
-	* `m`: mizuho ABINIT-MP
+	: .fred ファイル (出力)
+* `-sp FRAGMENT_OPTION_PROTEIN`, `--separate-protein FRAGMENT_OPTION_PROTEIN`
+	: タンパク質のフラグメント分割方法 (`+amino`, `/amino`, `+peptide`, `/peptide`; デフォルト: `+amino`)
+* `-sn FRAGMENT_OPTION_NUCLEIC`, `--separate-nucleic FRAGMENT_OPTION_NUCLEIC`
+	: 核酸のフラグメント分割方法 (`+base`, `/base`, `/sugar`; デフォルト: `+base`)
 * `-O`
 	: 上書きプロンプトを表示しない
 
 
-### fred4.py
 #### edit mode
 ```sh
 $ fred4.py edit [-h] -i INPUT.ajf -o OUTPUT.fred [-p REF.pdb] [-O]
@@ -75,7 +71,7 @@ $ fred4.py rewrite [-h] -i INPUT.fred -o OUTPUT.fred [-O]
 	: 上書きプロンプトを表示しない
 
 
-#### output
+#### output mode
 ```sh
 $ fred4.py output [-h] -i INPUT.fred -o OUTPUT.ajf [-p REF.pdb] [-O]
 ```
@@ -88,6 +84,19 @@ $ fred4.py output [-h] -i INPUT.fred -o OUTPUT.ajf [-p REF.pdb] [-O]
 	: .pdb ファイル (指定無しの場合、ReadGeom を読み込む)
 * `-O`
 	: 上書きプロンプトを表示しない
+
+
+#### writefrag mode
+```sh
+$  fred4.py writefrag [-h] -i INPUT.fred -p STRUCTURE.pdb -o OUTPUT_PREFIX
+```
+
+* `-i INPUT`
+	: .fred ファイル (入力)
+* `-p STRUCTURE.pdb`
+	: 全体構造の .pdb ファイル
+* `-o OUTPUT_PREFIX`
+	: 出力ファイルの接頭辞
 
 
 ### editfrag.py
@@ -109,6 +118,8 @@ $ editfrag.py [-h] -b WHOLE.pdb -n ADD.pdb [ADD.pdb ...] -f BASE.fred -o NEW.fre
 	: 同じフラグメントの分割方法を他の同種の分子にも適用する。
 * `-O`
 	: 上書きプロンプトを表示しない
+
+
 
 
 ## fred ファイルの仕様
@@ -181,6 +192,12 @@ Copyright (c) 2021 Tatsuya Ohyama
 
 
 ## ChangeLog
+### Ver. 13.0 (2024-11-19)
+* `autofrag.py` を parmed を使った仕様に変更した。
+* fred4.py に `autofrag.py` を `autofrag` モードとして統合し、`autofrag.py` を廃止した。
+* `fragseparator.py` を parmed を使った仕様に変更した。
+* fred4.py に `fragseparator.py` を `writefrag` モードとして統合し、`fragseparator.py` を廃止した。
+
 ### Ver. 12.0 (2024-10-08)
 * `autofrag` サブコマンドを実装した。
 * `autofrag.py` を廃止した。

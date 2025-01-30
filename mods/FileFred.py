@@ -302,11 +302,8 @@ class FileFred:
 		Returns:
 			self
 		"""
-		tmp_fragments = sorted([[obj_fragment.min_index, obj_fragment] for obj_fragment in self._fragments], key=lambda x : x[0])
-		self._fragments = [obj_fragment[1].set_index(idx) for idx, obj_fragment in enumerate(tmp_fragments, 1)]
-
 		with open(output_file, "w") as obj_output:
-			obj_output.write("  FNo.  | Charge | BDA | Atoms of fragment\n")
+			obj_output.write("  FNo.  | Charge | BAA | Atoms of fragment\n")
 			for idx, obj_fragment in enumerate(self._fragments, 1):
 				obj_fragment.set_index(idx)
 				obj_output.write("{0:>7} |{1:>5}   |{2:>3}  | {3}\n".format(
@@ -316,7 +313,7 @@ class FileFred:
 				))
 			obj_output.write("\n")
 
-			obj_output.write("<< connections (ex. \"Next_fragment_atom   Prev_fragment_atom\") >>\n")
+			obj_output.write("<< connections >>\n")
 			for obj_fragment in self._fragments:
 				list_connections = obj_fragment.get_connections()
 				if len(list_connections) == 0:

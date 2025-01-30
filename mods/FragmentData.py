@@ -54,10 +54,6 @@ class FragmentData:
 	def atoms(self):
 		return self._atoms
 
-	@property
-	def min_index(self):
-		return min(self._atoms)
-
 
 	def set_index(self, fragment_index):
 		"""
@@ -178,6 +174,20 @@ class FragmentData:
 		return self
 
 
+	def sort_atoms(self):
+		"""
+		Method to sort atom
+		"""
+		if isinstance(self._atoms[0], parmed.topologyobjects.Atom):
+			atom_table = {obj_atom.idx+1: obj_atom for obj_atom in self._atoms}
+			self._atoms = [v2 for v1, v2 in sorted(atom_table.items(), key=lambda x:x[0])]
+
+		else:
+			self._atoms = [atom_idx for atom_idx in sorted(self._atoms)]
+
+		return self
+
+
 	def get_atoms(self):
 		"""
 		Method to output atom list
@@ -199,7 +209,10 @@ class FragmentData:
 		Returns:
 			int: charge
 		"""
-		return self.charge
+		if self.charge is not None:
+			return self.charge
+		else:
+			return "ERR"
 
 
 	def get_bda(self):
@@ -209,7 +222,10 @@ class FragmentData:
 		Returns:
 			int: bda
 		"""
-		return self._bda
+		if self._bda is not None:
+			return self._bda
+		else:
+			return "ERR"
 
 
 	def get_connections(self):

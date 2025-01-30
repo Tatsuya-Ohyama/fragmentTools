@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
+import sys, signal
+sys.dont_write_bytecode = True
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 import parmed
 from mods.FragmentData import FragmentData
 
@@ -13,6 +16,7 @@ RESIDUE_TYPES = {
 	"Water": ["SOL", "WAT", "HOH"],
 	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn"]
 }
+DEBUG_MODE = False
 
 
 
@@ -39,8 +43,12 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 		sys.exit(1)
 
 	obj_mol = parmed.load_file(structure_file)
-	list_fragments = [[] for _ in obj_mol.residues]
+	if obj_mol.atoms[-1].idx+1 != obj_mol.atoms[-1].number:
+		sys.stderr.write("WARNING: The index of atoms in the PDB file does not match the index by number of atoms.\n         The output file is indexed by number of atoms.\n")
+
+	list_obj_fragments = [[FragmentData().set_atoms(list(obj_residue.atoms))] for obj_residue in obj_mol.residues]
 	list_atom_info = {obj_atom: None for obj_atom in obj_mol.atoms}
+	list_obj_atom_shift = [[[]] for obj_residue in obj_mol.residues]
 	for frag_i, obj_residue in enumerate(obj_mol.residues):
 		res_type = None
 		for res_type_ref, list_resnames in RESIDUE_TYPES.items():
@@ -49,373 +57,407 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 				break
 
 		if res_type == "AminoAcid":
-			# separate by fragment
+			# determine fragment charge
+			charge = None
+			if obj_residue.name in ["LYS", "ARG", "HIP", "SYM"]:
+				charge = 1
+
+			elif obj_residue.name in ["ASP", "GLU"]:
+				charge = -1
+
+			elif obj_residue.name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
+				charge = 0
+
+			else:
+				sys.stderr.write("WARNING: Unable to determine fragment charge by undefined amino acid residues (`{}`).\n".format(obj_residue.name))
+
+
+			# determine terminal
+			list_atoms = set(obj_residue.atoms)
+			list_bond_partners = [set(obj_atom.bond_partners) - list_atoms for obj_atom in obj_residue.atoms]
+			list_bond_partners = [v for v in list_bond_partners if len(v) != 0]
+			term_type = None
+
+			if len(list_bond_partners) == 0:
+				# single residue
+				term_type = "S"
+
+			elif len(list_bond_partners) == 1:
+				# bond with one residue -> terminal
+				obj_atom_partner = list_bond_partners.pop().pop()
+				if frag_i == 0:
+					# N-terminal (first fragment)
+					term_type = "N"
+					obj_atom_N = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "N"][0]
+					list_obj_atom_H = [obj_atom for obj_atom in obj_atom_N.bond_partners if obj_atom.element == 1]
+					if len(list_obj_atom_H) == 3:
+						list_obj_fragments[frag_i][0].add_charge(1)
+
+				elif obj_atom_partner not in obj_mol.residues[frag_i-1].atoms:
+					# N-terminal (not connected previous residue)
+					term_type = "N"
+					obj_atom_N = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "N"][0]
+					list_obj_atom_H = [obj_atom for obj_atom in obj_atom_N.bond_partners if obj_atom.element == 1]
+					if len(list_obj_atom_H) == 3:
+						list_obj_fragments[frag_i][0].add_charge(1)
+
+				else:
+					# C-terminal
+					term_type = "C"
+					obj_atom_C = [obj_atom for obj_atom in obj_residue.atoms if obj_atom.name == "C"][0]
+					list_obj_atom_O = [obj_atom for obj_atom in obj_atom_C.bond_partners if obj_atom.element == 8]
+					list_bond_partners_O = [set(obj_atom.bond_partners) - set([obj_atom_C]) for obj_atom in list_obj_atom_O]
+					list_bond_partners_O = [v for v in list_bond_partners_O if len(v) != 0]
+					if len(list_bond_partners_O) == 0:
+						list_obj_fragments[frag_i][0].add_charge(-1)
+
+			obj_fragment_backbone = list_obj_fragments[frag_i][0]
+			obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
+			if sep_amino.startswith("+"):
+				# prepare fragment
+				obj_fragment_backbone.add_charge(charge)
+
+			elif sep_amino.startswith("/"):
+				# prepare fragment
+				obj_fragment_backbone.add_charge(0)
+
+				list_obj_atom_shift[frag_i].append([])
+				list_obj_fragments[frag_i].append(FragmentData())	# add side chain fragment
+				obj_fragment_sidechain = list_obj_fragments[frag_i][1]
+				obj_fragment_sidechain.set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
+				obj_fragment_sidechain.add_charge(charge)
+
+				# separate into side chain
+				list_main_chain = []
+				list_side_chain = []
+				for obj_atom in obj_fragment_backbone.atoms:
+					if obj_residue.name in ["GLY", "PRO"]:
+						# do not separate side chain for GLY
+						list_main_chain.append(obj_atom)
+
+					elif obj_atom.name in ["N", "H", "C", "O", "CA", "HA"]:
+						list_main_chain.append(obj_atom)
+
+					elif term_type == "N":
+						# N-terminal and atoms connected with "N" -> main chain
+						for obj_atom_partner in obj_atom.bond_partners:
+							if obj_atom_partner.name == "N" and obj_residue.number == obj_atom_partner.residue.number:
+								# intra N-H in N-terminal -> main chain
+								list_main_chain.append(obj_atom)
+								break
+
+						else:
+							list_side_chain.append(obj_atom)
+
+					elif term_type == "C":
+						# C-terminal and atoms connected with "C" -> main chain
+						for obj_atom_partner in obj_atom.bond_partners:
+							if obj_atom_partner.name == "C" and obj_residue.number == obj_atom_partner.residue.number:
+								# intra C-O in C-terminal (OXT) -> main chain
+								list_main_chain.append(obj_atom)
+								break
+
+						else:
+							list_side_chain.append(obj_atom)
+
+					else:
+						list_side_chain.append(obj_atom)
+
+				obj_fragment_backbone.set_atoms(list_main_chain)
+				obj_fragment_sidechain.set_atoms(list_side_chain)
+
+
 			if sep_amino in ["+amino", "/amino"]:
-				# determine fragment charge
-				charge = None
-				if obj_residue.name in ["LYS", "ARG", "HIP", "SYM"]:
-					charge = 1
+				# shift atoms in main chain fragments
+				list_remain_atoms = []
+				list_shift_atoms = []
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
+					if obj_atom.name in ["C", "O"] and term_type != "C":
+						# shift to next fragment
+						list_shift_atoms.append(obj_atom)
 
-				elif obj_residue.name in ["ASP", "GLU"]:
-					charge = -1
+					else:
+						list_remain_atoms.append(obj_atom)
 
-				elif obj_residue.name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
-					charge = 0
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if frag_i+1 < len(list_obj_atom_shift):
+						list_obj_atom_shift[frag_i+1][shift_frag_idx].extend(list_shift_atoms)
 
-				else:
-					sys.stderr.write("WARNING: Unable to determine fragment charge by undefined amino acid residues (`{}`).\n".format(obj_residue.name))
-
-
-				# create fragment object
-				if sep_amino == "+amino":
-					if len(list_fragments[frag_i]) == 0:
-						list_fragments[frag_i].append(FragmentData())
-						list_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-					list_fragments[frag_i][0].add_charge(charge)
-
-				elif sep_amino == "/amino":
-					if len(list_fragments[frag_i]) == 0:
-						list_fragments[frag_i].append(FragmentData())	# for main chain
-						list_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-						list_fragments[frag_i][0].add_charge(0)
-
-						list_fragments[frag_i].append(FragmentData())	# for side chain
-						list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
-
-					elif len(list_fragments[frag_i]) == 1:
-						list_fragments[frag_i].append(FragmentData())	# for side chain
-						list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
-
-					list_fragments[frag_i][1].add_charge(charge)
-
-				# move main chain
-				for obj_atom in obj_residue.atoms:
-					if obj_atom.name in ["N", "H", "CA"]:
-						# main chain
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-					elif obj_atom.name in ["C", "O"]:
-						# move to next fragment
-						if len(list_fragments[frag_i+1]) == 0:
-							list_fragments[frag_i+1].append(FragmentData())
-							list_fragments[frag_i+1][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-						list_fragments[frag_i+1][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i+1][0]
-
-					elif sep_amino == "+amino":
-						# side chain atom with main chain
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-					elif sep_amino == "/amino":
-						# side chain atom without main chain
-						list_fragments[frag_i][1].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][1]
-
-			# separate by residue
-			if sep_amino in ["+peptide", "/peptide"]:
-				# determine fragment charge
-				charge = None
-				if obj_residue.name in ["LYS", "ARG", "HIP", "SYM"]:
-					charge = 1
-
-				elif obj_residue.name in ["ASP", "GLU"]:
-					charge = -1
-
-				elif obj_residue.name in ["ACE", "ALA", "ASN", "CYS", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
-					charge = 0
-
-				else:
-					sys.stderr.write("WARNING: Unable to determine fragment charge by undefined amino acid residues (`{}`).\n".format(obj_residue.name))
-
-
-				# create fragment object
-				if sep_amino == "+peptide":
-					if len(list_fragments[frag_i]) == 0:
-						list_fragments[frag_i].append(FragmentData())
-						list_fragments[frag_i].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-					list_fragments[frag_i][0].add_charge(charge)
-
-				elif sep_amino == "/peptide":
-					if len(list_fragments[frag_i]) == 0:
-						list_fragments[frag_i].append(FragmentData())	# for main chain
-						list_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_amino, "Backbone"))
-						list_fragments[frag_i][0].add_charge(0)
-
-						list_fragments[frag_i].append(FragmentData())	# for side chain
-						list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
-						list_fragments[frag_i][1].add_charge(charge)
-
-					elif len(list_fragments[frag_i]) == 1:
-						list_fragments[frag_i].append(FragmentData())	# for side chain
-						list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_amino, "Sidechain"))
-
-					list_fragments[frag_i][1].add_charge(charge)
-
-				for obj_atom in obj_residue.atoms:
-					if obj_atom.name in ["C", "O", "N", "H", "CA"]:
-						# main chain
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-					elif sep_amino == "+amino":
-						# side chain atom with main chain
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-					elif sep_amino == "/amino":
-						list_fragments[frag_i][1].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][1]
-
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in amino acid fragmentation. Please report to developer.\n")
+						sys.exit(1)
 			continue
+
 
 		if res_type == "NucleicAcid":
-			# determine charge
+			# determine terminal
+			list_atoms = set(obj_residue.atoms)
+			list_bond_partners = [set(obj_atom.bond_partners) - list_atoms for obj_atom in obj_residue.atoms]
+			list_bond_partners = [v for v in list_bond_partners if len(v) != 0]
+			term_type = None
+
+			if len(list_bond_partners) == 0:
+				# single residue
+				term_type = "S"
+
+			elif len(list_bond_partners) == 1:
+				# bond with one residue -> terminal
+				obj_atom_partner = list_bond_partners.pop().pop()
+				if frag_i == 0:
+					# 5'-terminal (first fragment)
+					term_type = "5"
+
+				elif obj_atom_partner not in obj_mol.residues[frag_i-1].atoms:
+					# N-terminal (not connected previous residue)
+					term_type = "5"
+
+				else:
+					# C-terminal
+					term_type = "3"
+
 			if sep_nuc == "+base":
-				list_fragments[frag_i].append(FragmentData())
-				list_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-				list_fragments[frag_i][0].add_charge(0)
+				# prepare fragment
+				obj_fragment_backbone = list_obj_fragments[frag_i][0]
+				obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
+				obj_fragment_backbone.add_charge(0)
+
+				# shift atoms in main chains
+				list_remain_atoms = []
+				list_shift_atoms = []
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
+					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+						list_shift_atoms.append(obj_atom)
+
+					else:
+						list_remain_atoms.append(obj_atom)
+
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if 0 < frag_i:
+						list_obj_atom_shift[frag_i-1][shift_frag_idx].extend(list_shift_atoms)
+						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
+							list_obj_fragments[frag_i-1][shift_frag_idx].add_charge(-1)
+
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in nucleic acid fragmentation (+base). Please report to developer.\n")
+						sys.exit(1)
 
 			elif sep_nuc == "/base":
-				list_fragments[frag_i].append(FragmentData())
-				list_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-				list_fragments[frag_i][0].add_charge(0)
-				list_fragments[frag_i].append(FragmentData())
-				list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
-				list_fragments[frag_i][1].add_charge(0)
+				# prepare fragment
+				obj_fragment_backbone = list_obj_fragments[frag_i][0]
+				obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
+				obj_fragment_backbone.add_charge(0)
+
+				list_obj_atom_shift[frag_i].append([])
+				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
+				obj_fragment_base = list_obj_fragments[frag_i][1]
+				obj_fragment_base.set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
+				obj_fragment_base.add_charge(0)
+
+				if DEBUG_MODE:
+					# the same as order of autofrag in ABINIT-MP
+					list_obj_fragments[frag_i][0] = obj_fragment_base
+					list_obj_fragments[frag_i][1] = obj_fragment_backbone
+
+				# separate into backbone and base
+				list_backbone = []
+				list_base = []
+				for obj_atom in obj_fragment_backbone.atoms:
+					if "'" in obj_atom.name or obj_atom.name in ["P", "O1P", "OP1", "O2P", "OP2", "HO5", "HO3", "H5T", "H3T"]:
+						# main chain
+						list_backbone.append(obj_atom)
+
+					else:
+						# base
+						list_base.append(obj_atom)
+
+				obj_fragment_backbone.set_atoms(list_backbone)
+				obj_fragment_base.set_atoms(list_base)
+
+				# shift atoms in main chains
+				list_remain_atoms = []
+				list_shift_atoms = []
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
+					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+						list_shift_atoms.append(obj_atom)
+
+					else:
+						list_remain_atoms.append(obj_atom)
+
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if 0 < frag_i:
+						list_obj_atom_shift[frag_i-1][shift_frag_idx].extend(list_shift_atoms)
+						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
+							list_obj_fragments[frag_i-1][shift_frag_idx].add_charge(-1)
+
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in nucleic acid fragmentation (/base). Please report to developer.\n")
+						sys.exit(1)
 
 			elif sep_nuc == "/sugar":
-				if len(list_fragments[frag_i]) == 0:
-					list_fragments[frag_i].append(FragmentData())
-					list_fragments[frag_i][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-					list_fragments[frag_i][0].add_charge(0)
-					list_fragments[frag_i].append(FragmentData())
-					list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
-					list_fragments[frag_i][1].add_charge(0)
-					list_fragments[frag_i].append(FragmentData())
-					list_fragments[frag_i][2].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
-					list_fragments[frag_i][2].add_charge(0)
+				# prepare fragment
+				obj_fragment_sugar = list_obj_fragments[frag_i][0]
+				obj_fragment_sugar.set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
+				obj_fragment_sugar.add_charge(0)
 
-				elif len(list_fragments[frag_i]) == 1:
-					list_fragments[frag_i].append(FragmentData())
-					list_fragments[frag_i][1].set_type("{}{}-{}".format(res_type, sep_nuc, "Sugar"))
-					list_fragments[frag_i][1].add_charge(0)
-					list_fragments[frag_i].append(FragmentData())
-					list_fragments[frag_i][2].set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
-					list_fragments[frag_i][2].add_charge(0)
+				list_obj_atom_shift[frag_i].append([])
+				list_obj_fragments[frag_i].append(FragmentData())	# add sugar fragment
+				obj_fragment_base = list_obj_fragments[frag_i][1]
+				obj_fragment_base.set_type("{}{}-{}".format(res_type, sep_nuc, "Base"))
+				obj_fragment_base.add_charge(0)
 
-			for obj_atom in obj_residue.atoms:
-				if sep_nuc == "+base":
-					# nucleotide
-					if obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
-						# move to next
-						if frag_i == 0:
-							list_fragments[frag_i][0].append_atom(obj_atom)
-							if obj_atom.name == "P":
-								list_fragments[frag_i][0].add_charge(-1)
-							list_atom_info[obj_atom] = list_fragments[frag_i][0]
+				list_obj_atom_shift[frag_i].append([])
+				list_obj_fragments[frag_i].append(FragmentData())	# add base fragment
+				obj_fragment_backbone = list_obj_fragments[frag_i][2]
+				obj_fragment_backbone.set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
+				obj_fragment_backbone.add_charge(0)
 
-						else:
-							list_fragments[frag_i-1][0].append_atom(obj_atom)
-							if obj_atom.name == "P":
-								list_fragments[frag_i-1][0].add_charge(-1)
-							list_atom_info[obj_atom] = list_fragments[frag_i-1][0]
+				if DEBUG_MODE:
+					# the same as order of autofrag in ABINIT-MP
+					list_obj_fragments[frag_i][0] = obj_fragment_base
+					list_obj_fragments[frag_i][1] = obj_fragment_sugar
+					list_obj_fragments[frag_i][2] = obj_fragment_backbone
 
-					else:
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-
-				elif sep_nuc == "/base":
-					if obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
-						# move to next
-						if frag_i == 0:
-							list_fragments[frag_i][0].append_atom(obj_atom)
-							if obj_atom.name == "P":
-								list_fragments[frag_i][0].add_charge(-1)
-							list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-						else:
-							list_fragments[frag_i-1][0].append_atom(obj_atom)
-							if obj_atom.name == "P":
-								list_fragments[frag_i-1][0].add_charge(-1)
-							list_atom_info[obj_atom] = list_fragments[frag_i-1][0]
-
-
-					elif "'" in obj_atom.name or obj_atom.name in ["H5T", "H3T"]:
-						# backbone
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
-
-					else:
-						# base
-						list_fragments[frag_i][1].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][1]
-
-				elif sep_nuc == "/sugar":
-					if not obj_atom.residue.name.endswith("5") and obj_atom.name in ["H5T", "P", "O1P", "OP1", "O2P", "OP2", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2"]:
+				# separate into backbone, sugar, and base
+				list_phosphate = []
+				list_sugar = []
+				list_base = []
+				for obj_atom in obj_fragment_sugar.atoms:
+					if obj_atom.name in ["O3'", "P", "O1P", "OP1", "O2P", "OP2", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
 						# main chain (phosphate)
-						list_fragments[frag_i][0].append_atom(obj_atom)
-						if obj_atom.name == "P":
-							list_fragments[frag_i][0].add_charge(-1)
-						list_atom_info[obj_atom] = list_fragments[frag_i][0]
+						if term_type == "5" and obj_atom.name in ["O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+							list_sugar.append(obj_atom)
 
-					elif obj_atom.name == "O3'" and not obj_atom.residue.name.endswith("3"):
-						if len(list_fragments[frag_i+1]) == 0:
-							list_fragments[frag_i+1].append(FragmentData())
-							list_fragments[frag_i+1][0].set_type("{}{}-{}".format(res_type, sep_nuc, "Backbone"))
-						list_fragments[frag_i+1][0].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i+1][0]
+						elif term_type == "3" and obj_atom.name == "O3'":
+							list_sugar.append(obj_atom)
 
-					elif "'" in obj_atom.name or obj_atom.name in ["H3T", "H5T"]:
+						else:
+							list_phosphate.append(obj_atom)
+
+					elif "'" in obj_atom.name or obj_atom.name in ["H5T", "HO5", "H3T", "HO3"]:
 						# sugar
-						list_fragments[frag_i][1].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][1]
+						list_sugar.append(obj_atom)
 
 					else:
 						# base
-						list_fragments[frag_i][2].append_atom(obj_atom)
-						list_atom_info[obj_atom] = list_fragments[frag_i][2]
+						list_base.append(obj_atom)
 
+				obj_fragment_sugar.set_atoms(list_sugar)
+				obj_fragment_base.set_atoms(list_base)
+				obj_fragment_backbone.set_atoms(list_phosphate)
+
+				# shift atoms in main chains (phosphate fragment)
+				list_remain_atoms = []
+				list_shift_atoms = []
+				shift_frag_idx = [i for i, obj_fragment in enumerate(list_obj_fragments[frag_i]) if obj_fragment.type.endswith("Backbone")].pop()
+				for obj_atom in list_obj_fragments[frag_i][shift_frag_idx].atoms:
+					if term_type in [None, "3"] and obj_atom.name in ["P", "OP1", "O1P", "OP2", "O2P", "O5'", "C5'", "H5'", "H5'1", "H5''", "H5'2", "1H5'", "2H5'"]:
+						list_shift_atoms.append(obj_atom)
+
+					else:
+						list_remain_atoms.append(obj_atom)
+
+				list_obj_fragments[frag_i][shift_frag_idx].set_atoms(list_remain_atoms)
+				if len(list_shift_atoms) != 0:
+					if 0 < frag_i:
+						list_obj_atom_shift[frag_i-1][shift_frag_idx].extend(list_shift_atoms)
+						if len([obj_atom for obj_atom in list_shift_atoms if obj_atom.name == "P"]) != 0:
+							list_obj_fragments[frag_i-1][shift_frag_idx].add_charge(-1)
+
+					else:
+						# end of shift atom
+						sys.stderr.write("ERROR: Algorithm error in nucleic acid fragmentation (/sugar). Please report to developer.\n")
+						sys.exit(1)
 			continue
 
+
 		if res_type == "Water":
-			list_fragments[frag_i].append(FragmentData())
-			list_fragments[frag_i][0].set_type("{}".format(res_type))
-			list_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
-			list_fragments[frag_i][0].add_charge(0)
-			list_atom_info[obj_atom] = list_fragments[frag_i][0]
+			list_obj_fragments[frag_i][0].set_type("{}".format(res_type))
+			list_obj_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
+			list_obj_fragments[frag_i][0].add_charge(0)
+			list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
 			continue
 
 		if res_type == "Ion":
-			list_fragments[frag_i].append(FragmentData())
-			list_fragments[frag_i][0].set_type("{}".format(res_type))
-			list_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
-			list_atom_info[obj_atom] = list_fragments[frag_i][0]
+			list_obj_fragments[frag_i][0].set_type("{}".format(res_type))
+			list_obj_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
+			list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
 			if obj_atom.element in [3, 11, 19, 37]:
-				list_fragments[frag_i][0].add_charge(1)
+				list_obj_fragments[frag_i][0].add_charge(1)
 
 			elif obj_atom.element in [4, 12, 20, 29, 30, 38, 56]:
-				list_fragments[frag_i][0].add_charge(2)
+				list_obj_fragments[frag_i][0].add_charge(2)
 
 			elif obj_atom.element in [9, 17, 35, 53]:
-				list_fragments[frag_i][0].add_charge(-1)
+				list_obj_fragments[frag_i][0].add_charge(-1)
 
 			continue
 
 		# Ligand
-		list_fragments[frag_i].append(FragmentData())
-		list_fragments[frag_i][0].set_type("{}".format("Ligand"))
-		list_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
-		list_atom_info[obj_atom] = list_fragments[frag_i][0]
+		list_obj_fragments[frag_i][0].set_type("{}".format("Ligand"))
+		list_obj_fragments[frag_i][0].set_atoms([obj_atom for obj_atom in obj_residue.atoms])
+		list_atom_info[obj_atom] = list_obj_fragments[frag_i][0]
+
+
+	# update shift atoms
+	for list_obj_fragments1, list_obj_atom_shift1 in zip(list_obj_fragments, list_obj_atom_shift):
+		for obj_fragment, list_atom in zip(list_obj_fragments1, list_obj_atom_shift1):
+			obj_fragment.set_atoms(obj_fragment.atoms + list_atom)
 
 	# flatten fragment list
-	list_fragments = [v2 for v1 in list_fragments for v2 in v1 if len(v2.atoms) != 0]
-	list_fragments = [obj_fragment.set_index(frag_idx) for frag_idx, obj_fragment in enumerate(list_fragments, 1)]
+	list_obj_fragments = [v2 for v1 in list_obj_fragments for v2 in v1 if len(v2.atoms) != 0]
+
+	# update fragment information
+	list_obj_fragments = [obj_fragment.set_index(frag_idx).set_bda(0).sort_atoms() for frag_idx, obj_fragment in enumerate(list_obj_fragments, 1)]
+
+	# update atom information
+	for obj_fragment in list_obj_fragments:
+		for obj_atom in obj_fragment.atoms:
+			list_atom_info[obj_atom] = obj_fragment
+
 
 	# make connection and bda information
-	for obj_fragment in list_fragments:
-		list_connections = []
+	# BDA = atom in negative charged fragment; BAA = atom in positive charged fragment
+	for obj_fragment in list_obj_fragments:
 		list_obj_atom_member = set(obj_fragment.atoms)
 		for obj_atom in obj_fragment.atoms:
-			list_obj_atom_partners = set(obj_atom.bond_partners)
-			list_obj_atom_other = list_obj_atom_partners - list_obj_atom_member
-			list_connections.extend([[obj_atom_partner, obj_atom] for obj_atom_partner in list_obj_atom_other])
+			# make bonded atom list in other fragment
+			list_obj_atom_partners = set(obj_atom.bond_partners) - list_obj_atom_member
+			for obj_atom_partner in list_obj_atom_partners:
+				obj_fragment_partner = list_atom_info[obj_atom_partner]
 
-		n_connection = len(list_connections)
-		if obj_fragment.type in ["AminoAcid+amino-Backbone", "AminoAcid+peptide-Backbone", "NucleicAcid+base-Backbone", "NucleicAcid/sugar-Backbone"]:
-			# chain type
-			if n_connection == 1:
-				# terminal
-				if list_connections[0][0].idx > list_connections[0][1].idx:
-					# N-terminal, 5'-terminal, or initial fragment
-					obj_fragment.set_connections([])
-					obj_fragment.set_bda(0)
+				# left: BDA (+1) / right: BAA (-1)
+				is_bda = False
+				if obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Backbone") and obj_fragment.index < obj_fragment_partner.index:
+					is_bda = True
 
-				else:
-					# C-terminal, 3'-terminal, or end fragment
-					obj_fragment.set_connections(list_connections)
-					obj_fragment.set_bda(1)
-					obj_fragment.add_charge(-1)
-					obj_fragment_partner = list_atom_info[list_connections[0][0]]
-					obj_fragment_partner.add_charge(1)
+				elif obj_fragment.type.endswith("Sidechain") and obj_fragment_partner.type.endswith("Backbone"):
+					is_bda = True
 
-			elif n_connection == 2:
-				for obj_atom_partner, obj_atom in list_connections:
-					if obj_atom.idx < obj_atom_partner.idx:
-						continue
+				elif obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Base"):
+					is_bda = True
 
-					obj_fragment.set_connections([[obj_atom_partner, obj_atom]])
-					obj_fragment.add_charge(-1)
-					obj_fragment_partner = list_atom_info[obj_atom_partner]
-					obj_fragment_partner.add_charge(1)
-				obj_fragment.set_bda(1)
+				elif obj_fragment.type.endswith("Backbone") and obj_fragment_partner.type.endswith("Sugar") and obj_fragment.index < obj_fragment_partner.index:
+					is_bda = True
 
-			else:
-				sys.stderr.write("ERROR: undefined bda type in fragment #{}.\n".format(obj_fragment.index))
-				sys.exit(1)
+				elif obj_fragment.type.endswith("Sugar") and obj_fragment_partner.type.endswith("Backbone") and obj_fragment.index < obj_fragment_partner.index:
+					is_bda = True
 
-		elif obj_fragment.type in ["AminoAcid/amino-Backbone", "AminoAcid/peptide-Backbone", "NucleicAcid/base-Backbone", "NucleicAcid/sugar-Sugar"]:
-			# chain with branch type
-			if n_connection == 2:
-				# terminal
-				for obj_atom_partner, obj_atom in list_connections:
-					if not (list_atom_info[obj_atom_partner].type.endswith("Backbone") or list_atom_info[obj_atom_partner].type.endswith("Sugar")):
-						# skip sidechain
-						continue
+				elif obj_fragment.type.endswith("Sugar") and obj_fragment_partner.type.endswith("Base"):
+					is_bda = True
 
-					# backbone
-					if obj_atom.idx < obj_atom_partner.idx:
-						# N-terminal, 5'-terminal, or initial fragment
-						obj_fragment.set_connections([])
-						obj_fragment.set_bda(0)
+				if is_bda:
+					obj_fragment_partner.append_connection([obj_atom, obj_atom_partner])
+					obj_fragment_partner.add_bda(1)
+					obj_fragment.add_charge(1)
+					obj_fragment_partner.add_charge(-1)
 
-					else:
-						# C-terminal, 3'-terminal, or end fragment
-						obj_fragment.set_connections([[obj_atom_partner, obj_atom]])
-						obj_fragment.set_bda(1)
-						obj_fragment.add_charge(-1)
-						obj_fragment_partner = list_atom_info[obj_atom_partner]
-						obj_fragment_partner.add_charge(1)
-
-			elif n_connection == 3:
-				for obj_atom_partner, obj_atom in list_connections:
-					obj_fragment_partner = list_atom_info[obj_atom_partner]
-					if obj_fragment_partner.type.endswith("Backbone") and obj_atom.idx > obj_atom_partner.idx:
-						obj_fragment.append_connection([obj_atom_partner, obj_atom])
-						obj_fragment.add_charge(-1)
-						obj_fragment_partner.add_charge(1)
-				obj_fragment.set_bda(1)
-
-			else:
-				sys.stderr.write("ERROR: undefined bda type in fragment #{}.\n".format(obj_fragment.index))
-				sys.exit(1)
-
-
-		elif obj_fragment.type in ["AminoAcid/amino-Sidechain", "AminoAcid/peptide-Sidechain", "NucleicAcid/base-Base", "NucleicAcid/sugar-Base"]:
-			# branch type
-			if n_connection == 1:
-				obj_fragment.set_connections(list_connections)
-				obj_fragment.set_bda(1)
-				obj_fragment.add_charge(-1)
-				obj_fragment_partner = list_atom_info[list_connections[0][0]]
-				obj_fragment_partner.add_charge(1)
-
-			else:
-				sys.stderr.write("ERROR: undefined bda type in fragment #{}.\n".format(obj_fragment.index))
-				sys.exit(1)
-
-		elif obj_fragment.type in ["Water", "Ion"]:
-			obj_fragment.set_connections([])
-			obj_fragment.set_bda(0)
-
-		elif obj_fragment.type == "Ligand":
-			sys.stderr.write("WARNING: Unable to determine charge and BDA of fragment #{}, due to the unknown residue.\n".format(obj_fragment.index))
-
-		else:
-			sys.stderr.write("ERROR: undefined bda type in fragment #{}.\n".format(obj_fragment.index))
-
-			sys.exit(1)
-
-	return list_fragments
+	return list_obj_fragments
