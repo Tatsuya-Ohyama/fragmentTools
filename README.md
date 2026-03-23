@@ -192,6 +192,9 @@ Copyright (c) 2021 Tatsuya Ohyama
 
 
 ## ChangeLog
+### Ver. 14.1
+* autofrag モードで、CYM を含む PDB を認識できないバグを修正した。
+
 ### Ver. 14.0 (2025-01-30)
 * autofrag モードで、ACE や NME のキャップされた残基に対応した。
 * autofrag モードで、電荷が特殊なアミノ酸残基に対応した。

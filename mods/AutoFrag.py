@@ -11,7 +11,7 @@ from mods.FragmentData import FragmentData
 
 # =============== Constant =============== #
 RESIDUE_TYPES = {
-	"AminoAcid": ["ACE", "ALA", "ARG", "ASH", "ASN", "ASP", "CYS", "CYM", "CYX", "GLH", "GLN", "GLU", "GLH", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYN", "LYS", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYM", "TYR", "VAL"],
+	"AminoAcid": ["ACE", "ALA", "ARG", "ASH", "ASN", "ASP", "CYS", "CYM", "CYX", "GLH", "GLN", "GLU", "GLH", "GLY", "HIS", "HIP", "HID", "HIE", "ILE", "LEU", "LYN", "LYS", "MET", "NME", "PHE", "PRO", "SER", "THR", "TRP", "TYM", "TYR", "VAL"],
 	"NucleicAcid": ["DA5", "DT5", "DG5", "DC5", "DA3", "DT3", "DG3", "DC3", "DA", "DT", "DG", "DC", "RA5", "RU5", "RG5", "RC5", "RA3", "RU3", "RG3", "RC3", "RA", "RU", "RG", "RC", "DNA_base"],
 	"Water": ["SOL", "WAT", "HOH"],
 	"Ion": ["Na", "Mg", "K", "Ca", "Cl", "Zn"]
@@ -59,13 +59,13 @@ def fragmentation(structure_file, sep_amino="+amino", sep_nuc="+base"):
 		if res_type == "AminoAcid":
 			# determine fragment charge
 			charge = None
-			if obj_residue.name in ["LYS", "ARG", "HIP", "SYM"]:
+			if obj_residue.name in ["LYS", "ARG", "HIP", "CYM"]:
 				charge = 1
 
 			elif obj_residue.name in ["ASP", "GLU", "TYM"]:
 				charge = -1
 
-			elif obj_residue.name in ["ACE", "ALA", "ASH", "ASN", "CYS", "CYX", "GLH", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "LYN", "MET", "NME", "PHE", "PRO", "SER", "SYM", "THR", "TRP", "TYR", "VAL"]:
+			elif obj_residue.name in ["ACE", "ALA", "ASH", "ASN", "CYS", "CYX", "GLH", "GLN", "GLY", "HIS", "HID", "HIE", "ILE", "LEU", "LYN", "MET", "NME", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"]:
 				charge = 0
 
 			else:
